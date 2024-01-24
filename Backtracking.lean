@@ -32,8 +32,13 @@ structure MonoPred where
   P : List (Fin 2) → Prop
   preserved_under_suffixes : ∀ (u v : List (Fin 2)), u <:+ v → P v → P u
 
+def Gap (L k : ℕ) : Type := Vector (Fin 2) (L - k)
+-- A vector of length L monus k, thought of as a possible suffix for a word of length L
+-- in which the first k bits are unspecified
+-- For example, a Gap 10 10 has length 10 - 10.
+
 -- count_those_with_suffix = number of squarefree words having w as suffix
-def count_those_with_suffix {k L:ℕ} (M : MonoPred) [DecidablePred M.P] (w : Vector (Fin 2) (L.succ-k)) : ℕ :=
+def count_those_with_suffix {k :ℕ} {L:ℕ} (M : MonoPred) [DecidablePred M.P] (w : Gap L.succ k) : ℕ :=
 by {
   induction k
   -- Base case:
@@ -68,9 +73,34 @@ theorem extsf (u v : List (Fin 2))
   exact G this
 }
 
+theorem extsf3 (u v : List (Fin 2))
+(h: u <:+ v) (hu : cubefree v) : cubefree u := by {
+  unfold cubefree; unfold cubefree at hu; intro lx; intro; intro x hx
+  rcases h with ⟨t,ht⟩; intro hc
+  have hgood: (x.1 ++ x.1 ++ x.1).length ≤ u.length :=  List.IsInfix.length_le hc
+  rcases hc with ⟨s₀,hs₀⟩; rcases hs₀ with ⟨s₁,hs₁⟩
+  have : lx < v.length := calc
+        lx  = x.1.length := x.2.symm
+        _   < x.1.length + x.1.length := Nat.lt_add_of_pos_left (List.length_pos.mpr hx)
+        _   ≤ x.1.length + x.1.length + x.1.length := Nat.le_add_right (List.length x.1 + List.length x.1) (List.length x.1)
+        _   = (x.1 ++ x.1).length + x.1.length := by rw[(List.length_append x.1 x.1).symm]
+        _   = (x.1 ++ x.1 ++ x.1).length := by exact (List.length_append (x.1 ++ x.1) x.1).symm
+        _   ≤ u.length := hgood
+        _   ≤ t.length + u.length := by linarith
+        _   = v.length := by {rw [← List.length_append t u,ht]}
+  let G := hu lx this x hx; unfold List.IsInfix at G
+  have : ∃ s t, s ++ (x.1 ++ x.1 ++ x.1) ++ t = v := by {exists t ++ s₀; exists s₁; rw [← ht,← hs₁]; simp}
+  exact G this
+}
+
 def SQF : MonoPred := {
   P := (λ w : List (Fin 2) ↦ squarefree w)
   preserved_under_suffixes := extsf
+}
+
+def CBF : MonoPred := {
+  P := (λ w : List (Fin 2) ↦ cubefree w)
+  preserved_under_suffixes := extsf3
 }
 
 instance : DecidablePred (SQF.P) := by {
@@ -79,10 +109,33 @@ instance : DecidablePred (SQF.P) := by {
   exact inferInstance
 }
 
-def myvec : Vector (Fin 2) (3-1) := ⟨[0,1],rfl⟩
-#eval count_those_with_suffix SQF myvec
--- This shows there is one squarefree word over {0,1} of length 3 with suffix 01, namely 101.
-example : count_those_with_suffix SQF myvec = 1 := by decide
+instance : DecidablePred (CBF.P) := by {
+  unfold CBF
+  simp
+  exact inferInstance
+}
+
+
+-- def myvec : Vector (Fin 2) (3-1) := ⟨[0,1],rfl⟩
+
+def myvec10 := (⟨[],rfl⟩ : Gap 10 10)
+def myvec9  : Gap 9 9   := ⟨[],rfl⟩
+def myvec8  : Gap 8 8   := ⟨[],rfl⟩
+def myvec7  : Gap 7 7   := ⟨[],rfl⟩
+
+#eval count_those_with_suffix CBF myvec9
+#eval count_those_with_suffix CBF myvec8
+#eval count_those_with_suffix CBF myvec7
+-- example : count_those_with_suffix SQF myvec10 = 0 := by decide
+
+#eval count_those_with_suffix CBF (⟨[],rfl⟩ : Gap 10 10) -- 118 cubefree words of length 10
+-- but producing a proof takes longer:
+-- example : count_those_with_suffix CBF (⟨[],rfl⟩ : Gap 4 4) = 10 := by decide
+example : count_those_with_suffix CBF (⟨[],rfl⟩ : Gap 5 5) = 16 := by decide
+-- example : count_those_with_suffix CBF (⟨[],rfl⟩ : Gap 6 6) = 24 := by decide
+--The number of binary cubefree words of length
+-- n=1, 2, 3,  4,  5,  6,  7,  8,  9,  10, ... are
+--   2, 4, 6, 10, 16, 24, 36, 56, 80, 118, ... (OEIS A028445)
 
 theorem cons_suffix
 {L n_1: ℕ} {a : Fin 2}
