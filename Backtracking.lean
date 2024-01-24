@@ -27,44 +27,20 @@ def capp {n L:ℕ} (a:Fin 2) (w : Vector (Fin 2) (L.succ-n.succ)) (h: ¬ n ≥ L
   exact (Nat.succ_sub this).symm
 }⟩
 
--- instance
---   (w y : List (Fin 2))
---   :
--- Decidable (y = 0 :: w) := by {
 
--- exact List.hasDecEq y (0 :: w)
--- }
+structure MonoPred where
+  P : List (Fin 2) → Prop
+  preserved_under_suffixes : ∀ (u v : List (Fin 2)), u <:+ v → P v → P u
 
-
-instance (P: List (Fin 2) → Prop) [DecidablePred P]
-  (w : List (Fin 2)) (a : Fin 2)
-  :
-Decidable (P (a :: w)) := by {
-rename_i h
-exact h (a :: w)
-}
-
-
-instance {k L : ℕ} (P: List (Fin 2) → Prop) [DecidablePred P]
-(h : ¬ k ≥ L.succ) (w : Vector (Fin 2) (L.succ - k.succ)):
-Decidable (P (capp 0 w h).1) := by {
- rename_i hh
- unfold capp
- simp
- exact hh (0 :: w.1)
-}
--- ned a decidable P capp 0 w h instance
-
--- sqf_suf = number of squarefree words having w as suffix
-
-def sqf_suf {k L:ℕ}  (w : Vector (Fin 2) (L.succ-k)) : ℕ :=
+-- count_those_with_suffix = number of squarefree words having w as suffix
+def count_those_with_suffix {k L:ℕ} (M : MonoPred) [DecidablePred M.P] (w : Vector (Fin 2) (L.succ-k)) : ℕ :=
 by {
   induction k
   -- Base case:
-  exact ((ite (squarefree w.1) 1 0))
+  exact ((ite (M.P w.1) 1 0))
   -- Inductive case:
   exact
-    (ite (squarefree w.1))
+    (ite (M.P w.1))
     (
       dite (n ≥ L.succ)
       (λ h ↦ n_ih ⟨List.nil, by {rw [Nat.sub_eq_zero_of_le h];rfl}⟩ )
@@ -74,47 +50,39 @@ by {
     0
 }
 
-theorem extsf {lu lv : ℕ} (u : Vector (Fin 2) lu) (v : Vector (Fin 2) lv)
-(h: u.1 <:+ v.1) (hu : squarefree v.1) : squarefree u.1 := by {
-  unfold squarefree
-  unfold squarefree at hu
-  intro lx
-  intro
-  intro x hx
-  rcases h with ⟨t,ht⟩
-  intro hc
-  have hgood: (x.1 ++ x.1).length ≤ u.1.length := by {
-    exact List.IsInfix.length_le hc
-  }
-  rcases hc with ⟨s₀,hs₀⟩
-  rcases hs₀ with ⟨s₁,hs₁⟩
-  have : t.length + u.1.length = (t ++ u.1).length :=
-    (List.length_append t u.1).symm
-  have h₀: t.length + u.1.length = v.1.length := by {
-    rw [this]
-    rw [ht]
-  }
-  have: 0 < x.1.length := List.length_pos.mpr hx
-  have : lx < v.1.length :=
-    calc
-    lx = x.1.length := x.2.symm
-    _ < x.1.length + x.1.length := Nat.lt_add_of_pos_left this
-    _ = (x.1 ++ x.1).length := (List.length_append x.1 x.1).symm
-    _ ≤ u.1.length := hgood
-    _ ≤ t.length + u.1.length := by linarith
-    _ = v.1.length := h₀
-    -- _ = v.length := Vector.length_val v
-  let G := hu lx this x hx
-  unfold List.IsInfix at G
-  have : ∃ s t, s ++ (x.1 ++ x.1) ++ t = v.1 := by {
-    exists t ++ s₀
-    exists s₁
-    rw [← ht]
-    rw [← hs₁]
-    simp
-  }
+theorem extsf (u v : List (Fin 2))
+(h: u <:+ v) (hu : squarefree v) : squarefree u := by {
+  unfold squarefree; unfold squarefree at hu; intro lx; intro; intro x hx
+  rcases h with ⟨t,ht⟩; intro hc
+  have hgood: (x.1 ++ x.1).length ≤ u.length :=  List.IsInfix.length_le hc
+  rcases hc with ⟨s₀,hs₀⟩; rcases hs₀ with ⟨s₁,hs₁⟩
+  have : lx < v.length := calc
+        lx  = x.1.length := x.2.symm
+        _   < x.1.length + x.1.length := Nat.lt_add_of_pos_left (List.length_pos.mpr hx)
+        _   = (x.1 ++ x.1).length := (List.length_append x.1 x.1).symm
+        _   ≤ u.length := hgood
+        _   ≤ t.length + u.length := by linarith
+        _   = v.length := by {rw [← List.length_append t u,ht]}
+  let G := hu lx this x hx; unfold List.IsInfix at G
+  have : ∃ s t, s ++ (x.1 ++ x.1) ++ t = v := by {exists t ++ s₀; exists s₁; rw [← ht,← hs₁]; simp}
   exact G this
 }
+
+def SQF : MonoPred := {
+  P := (λ w : List (Fin 2) ↦ squarefree w)
+  preserved_under_suffixes := extsf
+}
+
+instance : DecidablePred (SQF.P) := by {
+  unfold SQF
+  simp
+  exact inferInstance
+}
+
+def myvec : Vector (Fin 2) (3-1) := ⟨[0,1],rfl⟩
+#eval count_those_with_suffix SQF myvec
+-- This shows there is one squarefree word over {0,1} of length 3 with suffix 01, namely 101.
+example : count_those_with_suffix SQF myvec = 1 := by decide
 
 theorem cons_suffix
 {L n_1: ℕ} {a : Fin 2}
@@ -125,36 +93,34 @@ theorem cons_suffix
   exists [a];
 }
 
-theorem branch_out {n L:ℕ} (h: ¬ n ≥ L.succ) (w : Vector (Fin 2) (L.succ-n.succ)) :
-sqf_suf  (w)
-  = sqf_suf  (capp 0 w h)
-  + sqf_suf  (capp 1 w h)
-  -- + sqf_suf  (capp 2 w h)
+theorem branch_out {n L:ℕ} (M:MonoPred)[DecidablePred M.P] (h: ¬ n ≥ L.succ) (w : Vector (Fin 2) (L.succ-n.succ)) :
+  count_those_with_suffix M (w)
+  = count_those_with_suffix M (capp 0 w h)
+  + count_those_with_suffix M (capp 1 w h)
   := by {
+    induction n
+    -- Base step:
+    unfold count_those_with_suffix
+    simp
+    intro H
+    -- BLOCK
+    have h₀: ¬ M.P (capp 0 w h).1 := by {intro hc; exact H (M.preserved_under_suffixes w.1 (capp 0 w h).1 (cons_suffix _ _) hc)}
+    have h₁: ¬ M.P (capp 1 w h).1 := by {intro hc; exact H (M.preserved_under_suffixes w.1 (capp 1 w h).1 (cons_suffix _ _) hc)}
+    rw [if_neg h₀,if_neg h₁]
+    -- END OF BLOCK
 
-  induction n
-  -- Base step:
-  unfold sqf_suf
-  simp
-  intro H
-  -- BLOCK
-  have h₀: ¬ squarefree (capp 0 w h).1 := by {intro hc; exact H (extsf w (capp 0 w h) (cons_suffix _ _) hc)}
-  have h₁: ¬ squarefree (capp 1 w h).1 := by {intro hc; exact H (extsf w (capp 1 w h) (cons_suffix _ _) hc)}
-  rw [if_neg h₀,if_neg h₁]
-  -- END OF BLOCK
+    -- Inductive step:
+    unfold count_those_with_suffix
+    simp
+    by_cases H : (M.P w.1)
+    rw [if_pos H,dif_neg h]
 
-  -- Inductive step:
-  unfold sqf_suf
-  simp
-  by_cases H : (squarefree w.1)
-  rw [if_pos H,dif_neg h]
-
-  rw [if_neg H]
-  -- BLOCK
-  have h₀: ¬ squarefree (capp 0 w h).1 := by {intro hc; exact H (extsf w (capp 0 w h) (cons_suffix _ _) hc)}
-  have h₁: ¬ squarefree (capp 1 w h).1 := by {intro hc; exact H (extsf w (capp 1 w h) (cons_suffix _ _) hc)}
-  rw [if_neg h₀,if_neg h₁]
-  -- END OF BLOCK
+    rw [if_neg H]
+    -- BLOCK
+    have h₀: ¬ M.P (capp 0 w h).1 := by {intro hc; exact H (M.preserved_under_suffixes w.1 (capp 0 w h).1 (cons_suffix _ _) hc)}
+    have h₁: ¬ M.P (capp 1 w h).1 := by {intro hc; exact H (M.preserved_under_suffixes w.1 (capp 1 w h).1 (cons_suffix _ _) hc)}
+    rw [if_neg h₀,if_neg h₁]
+    -- END OF BLOCK
   }
 
 
@@ -172,9 +138,9 @@ theorem fincard_ext {α:Type} (P Q:α→ Prop) (h : ∀ x, P x ↔ Q x) [Fintype
   simp_rw [H]
 }
 
-theorem disjoint_branch {L : ℕ}:
-  Disjoint (λ v  : Vector (Fin 2) L.succ ↦ squarefree v.1 ∧ (capp 0 w h).1 <:+ v.1 )
-           (λ v  : Vector (Fin 2) L.succ ↦ squarefree v.1 ∧ (capp 1 w h).1 <:+ v.1 ) :=
+theorem disjoint_branch {L : ℕ} {M:MonoPred} [DecidablePred M.P]:
+  Disjoint (λ v  : Vector (Fin 2) L.succ ↦ M.P v.1 ∧ (capp 0 w h).1 <:+ v.1 )
+           (λ v  : Vector (Fin 2) L.succ ↦ M.P v.1 ∧ (capp 1 w h).1 <:+ v.1 ) :=
   by {
       unfold Disjoint
       intro S h0S h1S v hSv
@@ -197,31 +163,31 @@ theorem disjoint_branch {L : ℕ}:
     }
 
 
-theorem formal_verification_of_recursive_backtracking (k L:ℕ) (bound : k ≤ L.succ)
+theorem formal_verification_of_recursive_backtracking (k L:ℕ) (bound : k ≤ L.succ) (M:MonoPred) [DecidablePred M.P]
 (w : Vector (Fin 2) (L.succ-k)):
-  Fintype.card {v : Vector (Fin 2) L.succ // squarefree v.1 ∧ w.1 <:+ v.1}
-  = sqf_suf  w
+  Fintype.card {v : Vector (Fin 2) L.succ // M.P v.1 ∧ w.1 <:+ v.1}
+  = count_those_with_suffix M w
 := by {
   induction k
   have h₁: ∀ v : Vector (Fin 2) L.succ, w.1 <:+ v.1 → w.1 = v.1 := by {
     intro v hv; exact List.eq_of_suffix_of_length_eq hv (by {rw [v.2,w.2];simp})
   }
-  have h₂: ∀ x y : {v : Vector (Fin 2) L.succ // squarefree v.1 ∧ w.1 <:+ v.1}, x = y := by {
+  have h₂: ∀ x y : {v : Vector (Fin 2) L.succ // M.P v.1 ∧ w.1 <:+ v.1}, x = y := by {
     intro x y
     let Gx := h₁ x x.2.2
     let Gy := h₁ y y.2.2
     exact SetCoe.ext (SetCoe.ext (Eq.trans Gx.symm Gy))
   }
-  unfold sqf_suf
+  unfold count_those_with_suffix
   simp
-  by_cases hs : (squarefree w.1)
+  by_cases hs : (M.P w.1)
   rw [if_pos hs]
-  let u : {v : Vector (Fin 2) L.succ // squarefree v.1 ∧ w.1 <:+ v.1} := ⟨w,⟨hs, List.suffix_rfl⟩⟩
+  let u : {v : Vector (Fin 2) L.succ // M.P v.1 ∧ w.1 <:+ v.1} := ⟨w,⟨hs, List.suffix_rfl⟩⟩
   let G := subsingleton_iff.mpr (h₂)
   let H := uniqueOfSubsingleton u
   refine Fintype.card_unique
   rw [if_neg hs]
-  have : ∀ v: Vector (Fin 2) L.succ ,¬ (squarefree v.1 ∧ w.1 <:+ v.1) := by {
+  have : ∀ v: Vector (Fin 2) L.succ ,¬ (M.P v.1 ∧ w.1 <:+ v.1) := by {
     intro v hc
     have : v = w := (SetCoe.ext (h₁ v hc.2)).symm
     subst this
@@ -241,8 +207,8 @@ theorem formal_verification_of_recursive_backtracking (k L:ℕ) (bound : k ≤ L
   let g₀ := capp 0 w h --(0 ::ᵥ w)
   let g₁ := capp 1 w h
 
-  have halt: ∀ v : Vector (Fin 2) L.succ, squarefree v.1 ∧ w.1 <:+ v.1 ↔
-    (squarefree v.1 ∧ g₀.1 <:+ v.1) ∨ (squarefree v.1 ∧ g₁.1 <:+ v.1)  := by {
+  have halt: ∀ v : Vector (Fin 2) L.succ, M.P v.1 ∧ w.1 <:+ v.1 ↔
+    (M.P v.1 ∧ g₀.1 <:+ v.1) ∨ (M.P v.1 ∧ g₁.1 <:+ v.1)  := by {
     intro v; constructor; intro h
     rcases h.2 with ⟨t,ht⟩
     have hlong: t ≠ List.nil := by {
@@ -272,9 +238,9 @@ theorem formal_verification_of_recursive_backtracking (k L:ℕ) (bound : k ≤ L
     constructor; exact h_1.1; rcases h_1.2 with ⟨u,hu⟩; exists u ++ [1]; rw [← hu]; simp; rfl
   }
 
-  have hcard: Fintype.card { v : Vector (Fin 2) L.succ // squarefree v.1 ∧ w.1 <:+ v.1 }
-       = Fintype.card { v : Vector (Fin 2) L.succ // squarefree v.1 ∧ g₀.1 <:+ v.1 }
-       + Fintype.card { v : Vector (Fin 2) L.succ // squarefree v.1 ∧ g₁.1 <:+ v.1 }
+  have hcard: Fintype.card { v : Vector (Fin 2) L.succ // M.P v.1 ∧ w.1 <:+ v.1 }
+       = Fintype.card { v : Vector (Fin 2) L.succ // M.P v.1 ∧ g₀.1 <:+ v.1 }
+       + Fintype.card { v : Vector (Fin 2) L.succ // M.P v.1 ∧ g₁.1 <:+ v.1 }
     := by {rw [fincard_ext _ _ halt,← Fintype.card_subtype_or_disjoint _ _ disjoint_branch]}
 
   rw [hcard,branch_out,n_ih (Nat.le_of_lt bound) g₀,n_ih (Nat.le_of_lt bound) g₁]
