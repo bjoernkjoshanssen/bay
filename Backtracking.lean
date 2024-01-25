@@ -58,6 +58,27 @@ by {
     0
 }
 
+def those_with_suffix {k b :ℕ} {L:ℕ} (M : MonoPred b) [DecidablePred M.P] (w : Gap b L.succ k) : Finset (Vector (Fin b) L.succ) :=
+by {
+  induction k
+  -- Base case:
+  exact ((ite (M.P w.1) {w} ∅))
+  -- Inductive case:
+  exact
+    (ite (M.P w.1))
+    (
+      dite (n ≥ L.succ)
+      (λ h ↦ n_ih ⟨List.nil, by {rw [Nat.sub_eq_zero_of_le h];rfl}⟩ )
+      (
+        λ h ↦ Finset.biUnion (Finset.univ : Finset (Fin b)) (
+          (λ a ↦ (n_ih (capp b a w h)))
+        )
+      )
+    )
+    ∅
+}
+
+
 theorem extsf (b:ℕ) (u v : List (Fin b))
 (h: u <:+ v) (hu : squarefree v) : squarefree u := by {
   unfold squarefree; unfold squarefree at hu; intro lx; intro; intro x hx
@@ -125,10 +146,13 @@ def myvec10 := (⟨[],rfl⟩ : Gap 2 10 10)
 def myvec9  : Gap 2 9 9   := ⟨[],rfl⟩
 def myvec8  : Gap 2 8 8   := ⟨[],rfl⟩
 def myvec7  : Gap 2 7 7   := ⟨[],rfl⟩
-def myvec := (⟨[],rfl⟩ : Gap 3 5 5)
+def myvec := (⟨[],rfl⟩ : Gap 3 8 8)
 
 #eval count_those_with_suffix (CBF 2) myvec9
-#eval count_those_with_suffix (SQF 3) myvec
+#eval those_with_suffix (CBF 2) myvec9
+
+
+#eval those_with_suffix (SQF 3) myvec
 
 -- #eval count_those_with_suffix CBF myvec8
 -- #eval count_those_with_suffix CBF myvec7
