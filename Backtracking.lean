@@ -17,8 +17,8 @@ using recursive backtracking. Then we formally prove the correctness.
 -/
 
 -- controlled_append:
-def capp {n L:ℕ} (a:Fin 2) (w : Vector (Fin 2) (L.succ-n.succ)) (h: ¬ n ≥ L.succ)
-                            : Vector (Fin 2) (L.succ-n)
+def capp {n L:ℕ} (b:ℕ) (a:Fin b) (w : Vector (Fin b) (L.succ-n.succ)) (h: ¬ n ≥ L.succ)
+                            : Vector (Fin b) (L.succ-n)
 := ⟨ a :: w.1, by {
   rw [List.length_cons]
   simp
@@ -28,17 +28,17 @@ def capp {n L:ℕ} (a:Fin 2) (w : Vector (Fin 2) (L.succ-n.succ)) (h: ¬ n ≥ L
 }⟩
 
 
-structure MonoPred where
-  P : List (Fin 2) → Prop
-  preserved_under_suffixes : ∀ (u v : List (Fin 2)), u <:+ v → P v → P u
+structure MonoPred (b:ℕ) where
+  P : List (Fin b) → Prop
+  preserved_under_suffixes : ∀ (u v : List (Fin b)), u <:+ v → P v → P u
 
-def Gap (L k : ℕ) : Type := Vector (Fin 2) (L - k)
+def Gap (b:ℕ) (L k : ℕ) : Type := Vector (Fin b) (L - k)
 -- A vector of length L monus k, thought of as a possible suffix for a word of length L
 -- in which the first k bits are unspecified
 -- For example, a Gap 10 10 has length 10 - 10.
 
 -- count_those_with_suffix = number of squarefree words having w as suffix
-def count_those_with_suffix {k :ℕ} {L:ℕ} (M : MonoPred) [DecidablePred M.P] (w : Gap L.succ k) : ℕ :=
+def count_those_with_suffix {k b :ℕ} {L:ℕ} (M : MonoPred b) [DecidablePred M.P] (w : Gap b L.succ k) : ℕ :=
 by {
   induction k
   -- Base case:
@@ -49,13 +49,16 @@ by {
     (
       dite (n ≥ L.succ)
       (λ h ↦ n_ih ⟨List.nil, by {rw [Nat.sub_eq_zero_of_le h];rfl}⟩ )
-      (λ h ↦ (n_ih (capp 0 w h))
-          +  (n_ih (capp 1 w h)))
+      (
+        λ h ↦ List.sum (
+          List.map (λ a ↦ (n_ih (capp b a w h))) (List.ofFn id) -- this much does not rely on it being Fin 2
+        )
+      )
     )
     0
 }
 
-theorem extsf (u v : List (Fin 2))
+theorem extsf (b:ℕ) (u v : List (Fin b))
 (h: u <:+ v) (hu : squarefree v) : squarefree u := by {
   unfold squarefree; unfold squarefree at hu; intro lx; intro; intro x hx
   rcases h with ⟨t,ht⟩; intro hc
@@ -73,7 +76,7 @@ theorem extsf (u v : List (Fin 2))
   exact G this
 }
 
-theorem extsf3 (u v : List (Fin 2))
+theorem extsf3 (b:ℕ) (u v : List (Fin b))
 (h: u <:+ v) (hu : cubefree v) : cubefree u := by {
   unfold cubefree; unfold cubefree at hu; intro lx; intro; intro x hx
   rcases h with ⟨t,ht⟩; intro hc
@@ -93,23 +96,23 @@ theorem extsf3 (u v : List (Fin 2))
   exact G this
 }
 
-def SQF : MonoPred := {
-  P := (λ w : List (Fin 2) ↦ squarefree w)
-  preserved_under_suffixes := extsf
+def SQF (b:ℕ) : MonoPred b := {
+  P := (λ w : List (Fin b) ↦ squarefree w)
+  preserved_under_suffixes := extsf b
 }
 
-def CBF : MonoPred := {
-  P := (λ w : List (Fin 2) ↦ cubefree w)
-  preserved_under_suffixes := extsf3
+def CBF (b:ℕ): MonoPred b := {
+  P := (λ w : List (Fin b) ↦ cubefree w)
+  preserved_under_suffixes := extsf3 b
 }
 
-instance : DecidablePred (SQF.P) := by {
+instance (b:ℕ): DecidablePred ((SQF b).P) := by {
   unfold SQF
   simp
   exact inferInstance
 }
 
-instance : DecidablePred (CBF.P) := by {
+instance  (b:ℕ): DecidablePred ((CBF b).P) := by {
   unfold CBF
   simp
   exact inferInstance
@@ -118,48 +121,66 @@ instance : DecidablePred (CBF.P) := by {
 
 -- def myvec : Vector (Fin 2) (3-1) := ⟨[0,1],rfl⟩
 
-def myvec10 := (⟨[],rfl⟩ : Gap 10 10)
-def myvec9  : Gap 9 9   := ⟨[],rfl⟩
-def myvec8  : Gap 8 8   := ⟨[],rfl⟩
-def myvec7  : Gap 7 7   := ⟨[],rfl⟩
+def myvec10 := (⟨[],rfl⟩ : Gap 2 10 10)
+def myvec9  : Gap 2 9 9   := ⟨[],rfl⟩
+def myvec8  : Gap 2 8 8   := ⟨[],rfl⟩
+def myvec7  : Gap 2 7 7   := ⟨[],rfl⟩
+def myvec := (⟨[],rfl⟩ : Gap 3 5 5)
 
-#eval count_those_with_suffix CBF myvec9
-#eval count_those_with_suffix CBF myvec8
-#eval count_those_with_suffix CBF myvec7
+#eval count_those_with_suffix (CBF 2) myvec9
+#eval count_those_with_suffix (SQF 3) myvec
+
+-- #eval count_those_with_suffix CBF myvec8
+-- #eval count_those_with_suffix CBF myvec7
 -- example : count_those_with_suffix SQF myvec10 = 0 := by decide
 
-#eval count_those_with_suffix CBF (⟨[],rfl⟩ : Gap 10 10) -- 118 cubefree words of length 10
+-- #eval count_those_with_suffix CBF (⟨[],rfl⟩ : Gap 10 10) -- 118 cubefree words of length 10
 -- but producing a proof takes longer:
 -- example : count_those_with_suffix CBF (⟨[],rfl⟩ : Gap 4 4) = 10 := by decide
-example : count_those_with_suffix CBF (⟨[],rfl⟩ : Gap 5 5) = 16 := by decide
+-- example : count_those_with_suffix CBF (⟨[],rfl⟩ : Gap 5 5) = 16 := by decide
 -- example : count_those_with_suffix CBF (⟨[],rfl⟩ : Gap 6 6) = 24 := by decide
 --The number of binary cubefree words of length
 -- n=1, 2, 3,  4,  5,  6,  7,  8,  9,  10, ... are
 --   2, 4, 6, 10, 16, 24, 36, 56, 80, 118, ... (OEIS A028445)
 
-theorem cons_suffix
-{L n_1: ℕ} {a : Fin 2}
+theorem cons_suffix (b:ℕ)
+{L n_1: ℕ} {a : Fin b}
 (h: ¬n_1 ≥ Nat.succ L)
-(w: Vector (Fin 2) (Nat.succ L -  (Nat.succ n_1)))
+(w: Vector (Fin b) (Nat.succ L -  (Nat.succ n_1)))
 
-: w.1 <:+ (capp a w h).1 := by {
+: w.1 <:+ (capp b a w h).1 := by {
   exists [a];
 }
 
-theorem branch_out {n L:ℕ} (M:MonoPred)[DecidablePred M.P] (h: ¬ n ≥ L.succ) (w : Vector (Fin 2) (L.succ-n.succ)) :
+theorem branch_out (b:ℕ) {n L:ℕ} (M:MonoPred b)[DecidablePred M.P] (h: ¬ n ≥ L.succ) (w : Vector (Fin b) (L.succ-n.succ)) :
   count_those_with_suffix M (w)
-  = count_those_with_suffix M (capp 0 w h)
-  + count_those_with_suffix M (capp 1 w h)
+  = List.sum (List.map (λ a ↦ count_those_with_suffix M (capp b a w h)) (List.ofFn id))
   := by {
     induction n
     -- Base step:
     unfold count_those_with_suffix
     simp
     intro H
+
     -- BLOCK
-    have h₀: ¬ M.P (capp 0 w h).1 := by {intro hc; exact H (M.preserved_under_suffixes w.1 (capp 0 w h).1 (cons_suffix _ _) hc)}
-    have h₁: ¬ M.P (capp 1 w h).1 := by {intro hc; exact H (M.preserved_under_suffixes w.1 (capp 1 w h).1 (cons_suffix _ _) hc)}
-    rw [if_neg h₀,if_neg h₁]
+    have h₀₁: ∀ a, ¬ M.P (capp b a w h).1 :=
+      by {intro a hc; exact H (M.preserved_under_suffixes w.1 (capp b a w h).1 (cons_suffix b _ _) hc)}
+    symm
+    have : List.ofFn (fun a => if MonoPred.P M (capp b a w (by linarith)).1 then (1:ℕ) else (0:ℕ))
+     = List.replicate b 0 := by {
+      refine List.eq_replicate.mpr ?_
+      constructor
+      simp
+      intro i hi
+      simp at hi
+      rw [List.mem_iff_get] at hi
+      rcases hi with ⟨n,hn⟩
+      simp at hn
+      rw [if_neg (h₀₁ _)] at hn
+      exact hn.symm
+    }
+    rw [this]
+    apply List.sum_const_nat b 0
     -- END OF BLOCK
 
     -- Inductive step:
@@ -170,9 +191,54 @@ theorem branch_out {n L:ℕ} (M:MonoPred)[DecidablePred M.P] (h: ¬ n ≥ L.succ
 
     rw [if_neg H]
     -- BLOCK
-    have h₀: ¬ M.P (capp 0 w h).1 := by {intro hc; exact H (M.preserved_under_suffixes w.1 (capp 0 w h).1 (cons_suffix _ _) hc)}
-    have h₁: ¬ M.P (capp 1 w h).1 := by {intro hc; exact H (M.preserved_under_suffixes w.1 (capp 1 w h).1 (cons_suffix _ _) hc)}
-    rw [if_neg h₀,if_neg h₁]
+    have h₀₁: ∀ a, ¬ M.P (capp b a w h).1 :=
+      by {intro a hc; exact H (M.preserved_under_suffixes w.1 (capp b a w h).1 (cons_suffix b _ _) hc)}
+
+    -- Jan.24: here we need, if all ite are false then the sum is zero
+    --rw [if_neg (h₀₁ 0),if_neg (h₀₁ 1)]
+    symm
+    have : (List.ofFn fun a =>
+      if MonoPred.P M (capp b a w h).1 then
+        if h : Nat.succ L ≤ n_1 then
+          Nat.rec (motive := fun {k} => Gap b (Nat.succ L) k → ℕ) (fun w => if MonoPred.P M w.1 then 1 else 0)
+            (fun n n_ih w =>
+              if MonoPred.P M w.1 then
+                if h : Nat.succ L ≤ n then n_ih { val := [], property := (by {
+                  simp
+                  exact (Nat.sub_eq_zero_of_le h).symm
+                } : List.length [] = Nat.succ L - n) }
+                else List.sum (List.ofFn fun a => n_ih (capp b a w (h : ¬n ≥ Nat.succ L)))
+              else 0)
+            n_1 { val := [], property := ((by simp;exact (Nat.sub_eq_zero_of_le h).symm) : List.length [] = Nat.succ L - n_1) }
+        else
+          List.sum
+            (List.ofFn fun a_1 =>
+              Nat.rec (motive := fun {k} => Gap b (Nat.succ L) k → ℕ) (fun w => if MonoPred.P M w.1 then 1 else 0)
+                (fun n n_ih w =>
+                  if MonoPred.P M w.1 then
+                    if h : Nat.succ L ≤ n then n_ih { val := [], property := ((by simp;exact
+                      (Nat.sub_eq_zero_of_le h).symm) : List.length [] = Nat.succ L - n) }
+                    else List.sum (List.ofFn fun a => n_ih (capp b a w (h : ¬n ≥ Nat.succ L)))
+                  else 0)
+                n_1 (capp b a_1 (capp b a w (by {
+                  rename_i hh
+                  exact hh
+                })) (h : ¬n_1 ≥ Nat.succ L)))
+      else 0)
+     = List.replicate b 0 := by {
+      refine List.eq_replicate.mpr ?_
+      constructor
+      simp
+      intro i hi
+      simp at hi
+      rw [List.mem_iff_get] at hi
+      rcases hi with ⟨n,hn⟩
+      simp at hn
+      rw [if_neg (h₀₁ _)] at hn
+      exact hn.symm
+    }
+    rw [this]
+    apply List.sum_const_nat b 0
     -- END OF BLOCK
   }
 
@@ -191,9 +257,14 @@ theorem fincard_ext {α:Type} (P Q:α→ Prop) (h : ∀ x, P x ↔ Q x) [Fintype
   simp_rw [H]
 }
 
-theorem disjoint_branch {L : ℕ} {M:MonoPred} [DecidablePred M.P]:
-  Disjoint (λ v  : Vector (Fin 2) L.succ ↦ M.P v.1 ∧ (capp 0 w h).1 <:+ v.1 )
-           (λ v  : Vector (Fin 2) L.succ ↦ M.P v.1 ∧ (capp 1 w h).1 <:+ v.1 ) :=
+theorem disjoint_branch  {L : ℕ}
+{M:MonoPred 2} [DecidablePred M.P]
+  -- {n:ℕ}
+  -- (w: Vector (Fin 2) (L.succ-n.succ))
+  -- (h : ¬ n ≥ L.succ)
+  :
+  Disjoint (λ v  : Vector (Fin 2) L.succ ↦ M.P v.1 ∧ (capp 2 0 w h).1 <:+ v.1 )
+           (λ v  : Vector (Fin 2) L.succ ↦ M.P v.1 ∧ (capp 2 1 w h).1 <:+ v.1 ) :=
   by {
       unfold Disjoint
       intro S h0S h1S v hSv
@@ -216,7 +287,8 @@ theorem disjoint_branch {L : ℕ} {M:MonoPred} [DecidablePred M.P]:
     }
 
 
-theorem formal_verification_of_recursive_backtracking (k L:ℕ) (bound : k ≤ L.succ) (M:MonoPred) [DecidablePred M.P]
+-- We formally verify only for b=2.
+theorem formal_verification_of_recursive_backtracking (k L:ℕ) (bound : k ≤ L.succ) (M:MonoPred 2) [DecidablePred M.P]
 (w : Vector (Fin 2) (L.succ-k)):
   Fintype.card {v : Vector (Fin 2) L.succ // M.P v.1 ∧ w.1 <:+ v.1}
   = count_those_with_suffix M w
@@ -257,8 +329,8 @@ theorem formal_verification_of_recursive_backtracking (k L:ℕ) (bound : k ≤ L
               _ ≤ L.succ := bound
   exact LT.lt.false this
 
-  let g₀ := capp 0 w h --(0 ::ᵥ w)
-  let g₁ := capp 1 w h
+  let g₀ := capp 2 0 w h --(0 ::ᵥ w)
+  let g₁ := capp 2 1 w h
 
   have halt: ∀ v : Vector (Fin 2) L.succ, M.P v.1 ∧ w.1 <:+ v.1 ↔
     (M.P v.1 ∧ g₀.1 <:+ v.1) ∨ (M.P v.1 ∧ g₁.1 <:+ v.1)  := by {
@@ -297,5 +369,6 @@ theorem formal_verification_of_recursive_backtracking (k L:ℕ) (bound : k ≤ L
     := by {rw [fincard_ext _ _ halt,← Fintype.card_subtype_or_disjoint _ _ disjoint_branch]}
 
   rw [hcard,branch_out,n_ih (Nat.le_of_lt bound) g₀,n_ih (Nat.le_of_lt bound) g₁]
-
+  simp
+  exact h
 }
