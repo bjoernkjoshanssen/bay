@@ -1,0 +1,20 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: Formalized backtracking
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - given-names: Bjørn
+    family-names: Kjos-Hanssen
+    email: bjoernkh@hawaii.edu
+    name-particle: Bjørn
+    affiliation: University of Hawaii at Manoa
+    orcid: 'https://orcid.org/0000-0002-6199-1755'
+abstract: >-
+  Formalized backtracking in Lean 4, with an application to
+  protein folding.
+license: CC-BY-NC-SA-4.0
