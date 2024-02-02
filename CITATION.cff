@@ -14,6 +14,7 @@ authors:
     name-particle: Bjørn
     affiliation: University of Hawaii at Manoa
     orcid: 'https://orcid.org/0000-0002-6199-1755'
+repository-code: 'https://github.com/bjoernkjoshanssen/bay/StecherConjecture.lean'
 abstract: >-
   Formalized backtracking in Lean 4, with an application to
   protein folding.
