@@ -27,6 +27,9 @@ def Gap_cons {n L b:ℕ} (a:Fin b) (w : Gap b L.succ n.succ)
 def Gap_nil {k b L : ℕ} (h : k ≥ L) : Gap b L k
   := ⟨List.nil, by {rw [Nat.sub_eq_zero_of_le h];rfl}⟩
 
+
+def Gap_nil'  (b n : ℕ)             : Gap b n n := ⟨[], by simp⟩
+
 def num_by_backtracking {k b L:ℕ}
   (P: List (Fin b) → Prop) [DecidablePred P]
   (Q: List (Fin b) → Prop) [DecidablePred Q]
@@ -70,13 +73,14 @@ lemma still_does_not_hold''
   intro a hc;
   exact H (M.preserved_under_suffixes w.1 (Gap_cons a w h).1 (cons_suffix _ _) hc.1)
 
+
 theorem branch_out'' (b:ℕ) {n L:ℕ} (M:MonoPred b)[DecidablePred M.P][DecidablePred M.Q]
 (hnL: ¬ n ≥ L.succ) (w : Gap b L.succ n.succ) :
   num_by_backtracking M.P M.Q (w)
   = List.sum (List.ofFn (λ a ↦ num_by_backtracking M.P M.Q (Gap_cons a w hnL)))
   := by
-  induction n
-  -- Base step:
+  cases n -- Note: "induction n" not needed
+  -- Zero case:
   unfold num_by_backtracking
   simp
   intro H
@@ -90,17 +94,17 @@ theorem branch_out'' (b:ℕ) {n L:ℕ} (M:MonoPred b)[DecidablePred M.P][Decidab
         = List.replicate b 0 := by
     refine List.eq_replicate.mpr ?_
     constructor
-    simp
+    . simp
     intro i hi
     simp at hi
     rw [List.mem_iff_get] at hi
     rcases hi with ⟨n,hn⟩
     simp at hn
     rw [if_neg (still_does_not_hold'' _ H _)] at hn
-    exact hn.symm
+    . exact hn.symm
   rw [this]
-  apply List.sum_const_nat b 0
-    -- Inductive step:
+  . apply List.sum_const_nat b 0
+    -- Successor case:
   unfold num_by_backtracking
   simp
   by_cases H : (M.P w.1)
@@ -127,14 +131,14 @@ theorem branch_out'' (b:ℕ) {n L:ℕ} (M:MonoPred b)[DecidablePred M.P][Decidab
     = List.replicate b 0 := by {
     refine List.eq_replicate.mpr ?_
     constructor
-    simp
+    . simp
     intro i hi
     simp at hi
     rw [List.mem_iff_get] at hi
     rcases hi with ⟨n,hn⟩
     simp at hn
     rw [if_neg (still_does_not_hold _ H _)] at hn
-    exact hn.symm
+    . exact hn.symm
   }
   rw [this]
   apply List.sum_const_nat b 0
@@ -317,6 +321,48 @@ List.sum (List.ofFn (λ i ↦ Fintype.card {x:α // p i x}))
   ]; apply fincard_ext; exact distinguish_from_last
 }
 
+
+lemma get_union {α :Type} {x y : List α} (h : x <:+ y) (hl : x.length < y.length) :
+∃ a : α, a :: x <:+ y := by
+  rcases h with ⟨t,ht⟩; have : t ≠ [] := by
+    intro hc; subst hc; simp at ht; subst ht; contrapose hl
+    . exact Nat.lt_irrefl (List.length x)
+  have : ∃ a s, t.reverse = a :: s := List.exists_cons_of_ne_nil (List_reverse_ne_nil this)
+  rcases this with ⟨a,ha⟩; rcases ha with ⟨s,hs⟩; exists a; exists s.reverse
+  rw [List_reverse_cons hs] at ht; rw [← ht]
+  . simp
+
+instance {b L:ℕ} : Fintype (Gap b (Nat.succ L) 0) := by
+  unfold Gap
+  exact Vector.fintype
+
+theorem distribute_prop {α : Type} (P Q : Prop) {S : Prop} {s : α → Prop}
+     (h : S ↔ ∃ a, s a) :
+  P ∧ Q ∧ S ↔ ∃ a, P ∧ Q ∧ s a := by
+    constructor; intro h₀; rcases h.mp h₀.2.2 with ⟨a, ha⟩; exists a; tauto; intro h₀
+    rcases h₀ with ⟨a,ha⟩;constructor;tauto;constructor;tauto; have : ∃ a, s a := by exists a; tauto
+    rw [← h] at this; tauto
+
+theorem suffix_cons
+{b L: ℕ}
+{n: ℕ}
+(w: Gap b (Nat.succ L) (Nat.succ n))
+: ∀ (v : Gap b (Nat.succ L) 0), w.1 <:+ v.1 ↔ ∃ a, a :: w.1 <:+ v.1
+:= by
+    intro v; constructor
+    intro h
+    have : w.1.length < v.1.length := by
+      rw [w.2,v.2]; simp
+      . calc
+        _ ≤ L      := Nat.sub_le L n
+        _ < L.succ := Nat.lt.base L
+    . exact get_union h this
+    intro h
+    rcases h with ⟨a,ha⟩; rcases ha with ⟨t,ht⟩; exists t ++ [a]; rw [← ht]
+    . simp
+
+
+
 theorem backtracking_verification {k b L:ℕ}
 /- This verifies recursive backtracking for b-ary trees with monotone predicates P,
    with a non-monotone Q at the leaves. January 31, 2024.
@@ -339,7 +385,7 @@ theorem backtracking_verification {k b L:ℕ}
   )
   have := uniqueOfSubsingleton
     (⟨w,⟨hs, List.suffix_rfl⟩⟩ : {v : Vector (Fin b) L.succ // (M.P v.1 ∧ M.Q v.1) ∧ w.1 <:+ v.1})
-  exact Fintype.card_unique
+  . exact Fintype.card_unique
 
   rw [if_neg hs]
   have : ∀ v: Vector (Fin b) L.succ ,¬ ((M.P v.1 ∧ M.Q v.1) ∧ w.1 <:+ v.1) := by {
@@ -348,14 +394,14 @@ theorem backtracking_verification {k b L:ℕ}
     subst this; tauto
   }
   have := Subtype.isEmpty_of_false this
-  exact Fintype.card_eq_zero
+  . exact Fintype.card_eq_zero
   -- Inductive step:
   by_cases case : (n ≥ L.succ)
   exfalso
   have : n.succ ≤ n := calc
               _ ≤ L.succ := bound
               _ ≤ n      := case
-  exact Nat.not_succ_le_self n this
+  . exact Nat.not_succ_le_self n this
   -- Nontrivial case:
   have hcard : List.sum (List.ofFn (λ i ↦
        Fintype.card {v:Vector (Fin b) L.succ //      (M.P v.1 ∧ M.Q v.1) ∧ (Gap_cons i w case).1 <:+ v.1}
@@ -366,16 +412,9 @@ theorem backtracking_verification {k b L:ℕ}
     branch_out'' _ _ case,
     ← funext (λ i : Fin b ↦ n_ih (Nat.le_of_lt bound) (Gap_cons i w case)),
     hcard
-  ]; apply fincard_ext
-  -- The rest is a lemma basically:
-  intro x; constructor; intro h; constructor; tauto; rcases h.2 with ⟨t,ht⟩
-
-  rcases (List.exists_cons_of_ne_nil (List_reverse_ne_nil (Vector_append_succ_ne_nil ht))) with ⟨a,ha⟩
-  rcases ha with ⟨s,hs⟩;
-  exists a; exists s.reverse; rw [← ht,List_reverse_cons hs]; simp; rfl
-
-  intro hi; constructor; tauto; rcases hi.2 with ⟨a,ha⟩; rcases ha with ⟨t,ht⟩
-  exists t ++ [a]; rw [← ht]; simp; rfl
+  ];
+  apply fincard_ext; intro x;
+  . rw [and_assoc, distribute_prop (M.P x.1) (M.Q x.1) (suffix_cons w x)]; tauto
 
 
 instance (k b L f:ℕ)
@@ -392,3 +431,129 @@ instance (k b L f:ℕ)
 #eval Fintype.card {v : Vector (Fin 3) 3 // (squarefree v.1 ∧ True) ∧ [] <:+ v.1}
 example :
 Fintype.card {v : Vector (Fin 3) 3 // (squarefree v.1 ∧ True) ∧ [] <:+ v.1} = 12 := by decide
+
+instance : DecidableEq (Gap b (Nat.succ L) 0)
+:= by
+  unfold Gap
+  exact Vector.instDecidableEqVector
+def those_with_suffix' {k b :ℕ} {L:ℕ} (P: List (Fin b) → Prop) [DecidablePred P]
+  (Q: List (Fin b) → Prop) [DecidablePred Q] (w : Gap b L.succ k) : Finset (Gap b L.succ 0) :=
+by {
+  induction k
+  . exact ((ite (P w.1 ∧ Q w.1) {w} ∅))
+  . exact
+      (ite (P w.1))
+      (
+        dite (n ≥ L.succ)
+        (λ h ↦ n_ih (Gap_nil h))
+        (
+          λ h ↦ Finset.biUnion (Finset.univ : Finset (Fin b)) (
+            (λ a ↦ (n_ih (Gap_cons a w h)))
+          )
+        )
+      )
+      ∅
+}
+
+
+
+
+
+
+theorem branch_out_set (b:ℕ) {n L:ℕ}
+{M: MonoPred b} [DecidablePred M.P]
+[DecidablePred M.Q]
+(hnL: ¬ n ≥ L.succ) (w : Gap b L.succ n.succ) :
+  those_with_suffix' M.P M.Q (w)
+  = Finset.biUnion (Finset.univ : Finset (Fin b)) (λ a ↦ those_with_suffix' M.P M.Q (Gap_cons a w hnL))
+:= by
+  cases n -- induction not needed
+  unfold those_with_suffix'; simp; intro H; symm
+  have : ∀ a, ite (M.P (Gap_cons a w hnL).1 ∧ M.Q (Gap_cons a w hnL).1)
+      ({Gap_cons a w hnL} : Finset _) ∅ = ∅ := by
+      intro a
+      have : ¬ M.P (Gap_cons a w hnL).1 := still_does_not_hold _ H _
+      have : ¬ (M.P (Gap_cons a w hnL).1 ∧ M.Q (Gap_cons a w hnL).1) := by tauto
+      rw [if_neg this]
+  rw [funext this]
+  simp
+  apply Finset.ext;intro v;constructor;
+  . intro h;simp at h
+  . intro h;simp; tauto
+  -- Successor case
+  unfold those_with_suffix'; simp
+  by_cases H : (M.P w.1)
+  . rw [if_pos H,dif_neg hnL]
+  rw [if_neg H]; symm
+  apply Finset.ext; intro v; constructor; intro hv; contrapose hv; simp; intro i
+  rw [if_neg (still_does_not_hold _ H _)]
+  . intro hv; simp at hv
+  . intro hv; simp at hv
+
+
+theorem filter_suffix_empty
+{b L: ℕ}
+{P Q : List (Fin b) → Prop}
+[DecidablePred P]
+[DecidablePred Q]
+(w: Gap b (Nat.succ L) Nat.zero)
+(holds: ¬(P w.1 ∧ Q w.1))
+: ∅ = Finset.filter (fun v : Gap b L.succ 0 => P v.1 ∧ Q v.1 ∧ w.1 <:+ v.1) Finset.univ
+:= by
+  apply Finset.ext
+  intro a;
+  constructor;
+  . intro ha; simp at ha;
+  intro ha; simp at ha;
+  have : w.1 = a.1 := List.eq_of_suffix_of_length_eq ha.2.2 (by {rw [w.2,a.2]})
+  rw [this] at holds
+  . tauto
+
+theorem filter_suffix_singleton
+{b L: ℕ}
+{P Q : List (Fin b) → Prop}
+[DecidablePred P]
+[DecidablePred Q]
+(w: Gap b (Nat.succ L) Nat.zero)
+(holds: (P w.1 ∧ Q w.1))
+: {w} = Finset.filter (fun v : Gap b L.succ 0 => P v.1 ∧ Q v.1 ∧ w.1 <:+ v.1) Finset.univ
+:= by
+  apply Finset.ext
+  intro a; constructor; intro ha; simp at ha; subst ha; simp; constructor; tauto; constructor
+  tauto;
+  . exists []
+  simp;intro;intro;intro hs;symm
+  have : w.1 = a.1 := List.eq_of_suffix_of_length_eq hs (by {rw [w.2,a.2]})
+  . exact Vector.eq w a this
+
+
+theorem verify_those_with_suffix' {k b :ℕ} {L:ℕ} (bound : k ≤ L.succ)
+{M:MonoPred b}
+[DecidablePred M.P]
+[DecidablePred M.Q] (w : Gap b L.succ k) :
+  those_with_suffix' M.P M.Q w = Finset.filter (
+    λ v : Gap b L.succ 0 ↦ M.P v.1 ∧ M.Q v.1 ∧ w.1 <:+ v.1
+  ) Finset.univ := by
+  induction k
+  unfold those_with_suffix'
+  simp
+  by_cases holds: (M.P w.1 ∧ M.Q w.1)
+  . rw [if_pos holds]; exact filter_suffix_singleton _ holds
+  . rw [if_neg holds]; exact filter_suffix_empty _ holds
+
+  -- Inductive step
+  by_cases hLn: (L.succ ≤ n) -- hLn some places called "case"
+  have : n.succ ≤ n := calc
+              _ ≤ L.succ := bound
+              _ ≤ n      := hLn
+  . exfalso; exact Nat.not_succ_le_self n this
+
+  let U := (Finset.univ : Finset (Gap b L.succ 0))
+
+  have h₂ : Finset.filter (fun v => M.P v.1 ∧ M.Q v.1 ∧      w.1 <:+ v.1) U = Finset.biUnion (Finset.univ : Finset (Fin b))
+     (λ a ↦ Finset.filter (fun v => M.P v.1 ∧ M.Q v.1 ∧ a :: w.1 <:+ v.1) U) := by calc
+    _ = Finset.filter (fun v => ∃ a, M.P v.1 ∧ M.Q v.1 ∧ a :: w.1 <:+ v.1) U := by
+      simp_rw [funext (λ a ↦ propext (distribute_prop _ _ (suffix_cons _ a)))]
+    _ = _                                                                    := by apply Finset.ext; intro v; simp;
+
+  . rw [branch_out_set,h₂,funext (λ a ↦ n_ih (Nat.le_of_lt bound) (Gap_cons a w hLn))];rfl
