@@ -5,14 +5,8 @@ import MyProject.BacktrackingVerification
 set_option tactic.hygienic false
 set_option maxHeartbeats 3000000
 
--- Before we can erase extend_fold
--- we must address the fact that
--- those_with_suffix uses predicates on Lists not Vectors.
--- But that's a problem because then the type of P and Q become part of the induction
--- in a new way.
--- so the predicate P should say about a list and a "phobe" something about them both restricted
--- to the minimum of their lengths.
-
+/- We formalize the non-monotonicity of the objective function in the hydrophobic-polar protein folding model,
+refuting an unpublished conjecture of Stecher. -/
 
 -- Encoding the allowed moves for the rectangular lattice structure on ℤ × ℤ using Fin 4:
 def move_fin : Fin 4 →ℤ×ℤ → ℤ×ℤ
