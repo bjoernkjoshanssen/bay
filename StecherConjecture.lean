@@ -586,7 +586,7 @@ theorem transform_of_embed  {α:Type} [OfNat α 0] [DecidableEq α] {b₀ b₁ :
 def pts_tot_bound   {α:Type} [OfNat α 0] [DecidableEq α]
 {β : Type} [Fintype β]
 (go : β → α → α) {l:ℕ} (ph : Vector Bool l.succ) (q : ℕ) :=
-∀ moves : Vector β l,
+∀ moves : Vector β l, List.Nodup (path go moves.1).1 →
 pts_tot go ph (⟨(path go moves.1).1,path_len _ _⟩) ≤ q
 
 
@@ -635,12 +635,13 @@ def P_hex' {l:ℕ} := λ ph : Vector Bool l.succ ↦ HP hex ph
 -- #eval pts_tot_bound tri ⟨[false],rfl⟩ 5
 
 
+
 /- Restructure this as value_bound_of_strong_embedding -/
 theorem value_bound_of_embeds_strongly {α:Type} [OfNat α 0] [DecidableEq α] {b₀ b₁ : ℕ}
 {go₀ : Fin b₀ → α → α} {go₁ : Fin b₁ → α → α} (h_embed : embeds_in_strongly go₀ go₁)
 {l:ℕ} (ph : Vector Bool l.succ) : HP go₀ ph ≤ HP go₁ ph := by
   apply Nat.find_mono
-  intro q hq moves
+  intro q hq moves h_inj
   let he := embeds_of_strongly_embeds h_embed
   let Q := pts_bound_of_embeds he ph (⟨(path go₀ moves.1).1,path_len _ _⟩)
   rcases h_embed with ⟨f,hf⟩
@@ -649,12 +650,19 @@ theorem value_bound_of_embeds_strongly {α:Type} [OfNat α 0] [DecidableEq α] {
       morph f go₀ moves.1,
       (by rw [morph_len]; exact moves.2)
     ⟩ : Vector (Fin b₁) l)
+  have h_inj':  List.Nodup (path go₁ moves'.1).1 := by
+    let Q := transform_of_embed f go₀ go₁ (moves.1) hf
+    unfold path_transformed at Q
+    let R := congrArg (λ x ↦ x.1) Q
+    simp at R
+    rw [R]
+    tauto
   have : (path go₀ moves.1).1 = (path go₁ (morph f go₀ moves.1)).1 :=
     path_eq_path_morph f go₀ go₁ hf moves.1
   calc
   _ ≤ pts_tot go₁ ph ⟨(path go₀  moves.1).1, path_len _ _⟩ := Q
   _ = pts_tot go₁ ph ⟨(path go₁ moves'.1).1, path_len _ _⟩ := by simp_rw [this]
-  _ ≤ q                                                    := hq moves'
+  _ ≤ q                                                    := hq moves' h_inj'
 
 
 #eval HP quad ⟨[true,false,false,true],rfl⟩
