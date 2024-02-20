@@ -1,38 +1,26 @@
 import Mathlib.Data.Nat.Basic
+import Mathlib.Tactic
 import Mathlib.Data.Vector.Basic
 import MyProject.MonoPred
 import MyProject.BacktrackingVerification
-import Mathlib.Computability.NFA
-import Mathlib.MeasureTheory.Constructions.Prod.Basic
-import Std.Data.Nat.Lemmas
-import Mathlib.Data.Matrix.Basic
-import Mathlib.Combinatorics.SimpleGraph.Basic
-import Mathlib.Data.Nat.Digits
 
 set_option tactic.hygienic false
 set_option maxHeartbeats 3000000
+-- set_option maxRecDepth 10000
+/-
+A treatment of the hydrophobic-polar protein folding model in a generality
+that covers rectangular, triangular and hexagonal lattices: P_rect, P_tri, P_hex.
 
-/- We formalize the non-monotonicity of the objective function in the hydrophobic-polar protein folding model,
-refuting an unpublished conjecture of Stecher. -/
+We formalize the non-monotonicity of the objective function,
+refuting an unpublished conjecture of Stecher.
 
--- Encoding the allowed moves for the rectangular lattice structure on ℤ × ℤ using Fin 4:
+We prove objective function bounds:
+P_tri ≤ P_rect ≤ P_hex (using a theory of embeddings)
+and for any model, P ≤ b * l and P ≤ l * l
+where b is the number of moves and l is the word length.
+-/
 
-theorem finfin {l : ℕ} {k: Fin l} (i : Fin k): i.1 < l := calc
-  _ < k.1 := i.isLt
-  _ < l   := k.isLt
-
-def nat_of_bool : Bool → ℕ := λ b ↦ ite (b=true) 1 0
-
-theorem nat_of_bool_bound : ∀ a : Bool, nat_of_bool a ≤ 1 := by intro a; unfold nat_of_bool; cases a; simp; simp
-
-theorem nat_of_bool_monotone {P Q : Bool}
-(h : P ≤ Q) : nat_of_bool P ≤ nat_of_bool Q := by
-  unfold nat_of_bool; by_cases h₀: (P = true); rw [if_pos h₀]; by_cases h₁: (Q = true)
-  . rw [if_pos h₁]
-  rw [if_neg h₁]; exfalso; tauto; rw [if_neg h₀]
-  . exact zero_le _
-
-/- Start of unused, other lattice structures. -/
+section Defining_the_protein_folding_moves
 
 def quad₃ : Fin 6 → ℤ×ℤ×ℤ → ℤ×ℤ×ℤ
 | 0 => (. + ( 1, 0, 0))
@@ -65,32 +53,1154 @@ def quad : Fin 4 → ℤ×ℤ → ℤ×ℤ
 | 2 => sp
 | 3 => sm
 
+def rectMap (a : Fin 4) : ℤ×ℤ := match a with
+  | 0 => (1,0)
+  | 1 => (-1,0)
+  | 2 => (0,1)
+  | 3 => (0,-1)
+
+def rect (a : Fin 4) (x: ℤ×ℤ) : ℤ×ℤ := x + rectMap a
+
+
 -- move_hex represents the degree-6 hexagonal/triangular lattice, although that in itself requires checking.
 -- This representation was designed to make the y-axis vertical to fit with a computer game.
-def move_hex : Fin 6 → ℤ×ℤ → ℤ×ℤ
-| 0 => go_D
-| 1 => go_A
-| 2 => go_X
-| 3 => go_W
-| 4 => go_E
-| 5 => go_Z
+-- def move_hex : Fin 6 → ℤ×ℤ → ℤ×ℤ
+-- | 0 => go_D
+-- | 1 => go_A
+-- | 2 => go_X
+-- | 3 => go_W
+-- | 4 => go_E
+-- | 5 => go_Z
 -- #eval move_hex 0 (0,0)
 -- #eval move_hex 5 (1,0)
 
 -- If computer games are not to be used we can use a simpler implementation:
-def goX : ℤ×ℤ → ℤ×ℤ := (. + (1,1))
-def goW : ℤ×ℤ → ℤ×ℤ := (. + (-1,-1))
-def goZ : ℤ×ℤ → ℤ×ℤ := (. + (0,-1))
-def goE : ℤ×ℤ → ℤ×ℤ := (. + (0,1))
-def goA := go_A
-def goD := go_D
-def hex : Fin 6 → ℤ×ℤ → ℤ×ℤ
-| 0 => goD
-| 1 => goA
-| 2 => goE
-| 3 => goZ
-| 4 => goX
-| 5 => goW
+def hexMap (a : Fin 6) : ℤ×ℤ := match a with
+  | 0 => (1,0)
+  | 1 => (-1,0)
+  | 2 => (0,1)
+  | 3 => (0,-1)
+  | 4 => (1,1)
+  | 5 => (-1,-1)
+
+def hex (a : Fin 6) (x: ℤ×ℤ) : ℤ×ℤ := x + hexMap a
+
+theorem hexMap_injective : Function.Injective hexMap := by decide
+
+def go_WS : ℤ×ℤ → ℤ×ℤ := λ x ↦ ite (Even (x.1+x.2)) (sp x) (sm x)
+
+def tri : Fin 3 → ℤ×ℤ → ℤ×ℤ
+| 0 => go_D
+| 1 => go_A
+| 2 => go_WS
+
+end Defining_the_protein_folding_moves
+
+
+section Embedding_one_protein_folding_model_into_another
+
+def embeds_in {α:Type} {b₀ b₁ : ℕ} (go₀ : Fin b₀ → α → α)
+(go₁ : Fin b₁ → α → α) :=
+∀ i : Fin b₀, ∀ x : α, ∃ j : Fin b₁, go₀ i x = go₁ j x
+
+def is_embedding {α:Type} {b₀ b₁ : ℕ} (go₀ : Fin b₀ → α → α)
+(go₁ : Fin b₁ → α → α) (f : Fin b₀ → α → Fin b₁) :=
+∀ i : Fin b₀, ∀ x : α, go₀ i x = go₁ (f i x) x
+
+def embeds_in_strongly {α:Type} {b₀ b₁ : ℕ} (go₀ : Fin b₀ → α → α)
+(go₁ : Fin b₁ → α → α) :=
+∃ f : Fin b₀ → α → Fin b₁, is_embedding go₀ go₁ f
+
+infix:50 " ≼ " => embeds_in_strongly
+
+theorem embeds_in_strongly_transitive {α:Type} {b₀ b₁ b₂: ℕ}
+(go₀ : Fin b₀ → α → α)
+(go₁ : Fin b₁ → α → α) (go₂ : Fin b₂ → α → α) :
+go₀ ≼ go₁ → go₁ ≼ go₂ → go₀ ≼ go₂ := by
+  intro h₀₁ h₁₂
+  unfold embeds_in_strongly is_embedding at *
+  rcases h₀₁ with ⟨f₀₁,hf₀₁⟩
+  rcases h₁₂ with ⟨f₁₂,hf₁₂⟩
+  exists (λ i x ↦ f₁₂ (f₀₁ i x) x)
+  intro i x
+  rw [hf₀₁,hf₁₂]
+
+theorem embeds_in_strongly_reflexive {α:Type} {b: ℕ}
+(go : Fin b → α → α)
+: go ≼ go := by
+  unfold embeds_in_strongly is_embedding at *
+  exists (λ i _ ↦ i)
+  intro i x
+  simp
+
+theorem embeds_of_strongly_embeds {α:Type} {b₀ b₁ : ℕ} {go₀ : Fin b₀ → α → α}
+{go₁ : Fin b₁ → α → α} (h_embed: go₀ ≼ go₁):
+embeds_in go₀ go₁ := by
+  rcases h_embed with ⟨f,hf⟩; intro i x; exists f i x; exact hf i x
+
+-- For tri we can only assert a pointwise version of embed_models:
+/- It follows from tri_quad_embedding that any sequence of moves under tri generates a sequence in ℤ×ℤ
+  that can also be generated using quad:
+-/
+
+def tri_quad_embedding : Fin 3 → ℤ×ℤ → Fin 4
+| 0 => λ _ ↦ 0
+| 1 => λ _ ↦ 1
+| 2 => λ x ↦ ite (Even (x.1 + x.2)) 2 3
+
+/-
+
+3n      4n        6n    n(n-1)/2
+P_tri   P_rect    P_hex
+-/
+
+/-
+This is almost an embedding of presented group actions
+sending generators to generators, but not quite.
+In fact, the map φ that transports a point vertically
+across the triple point in the brick wall lattice
+is not a translation! But there are two translations (up and down) such that
+φ always agree with one or the other.
+
+The map φ has order two and all its orbits have cardinality two.
+-/
+
+-- Using hex we have that each entry in quad is in hex:
+def quad_hex_embedding : Fin 4 → ℤ×ℤ → Fin 6
+| 0 => λ _ ↦ 0
+| 1 => λ _ ↦ 1
+| 2 => λ _ ↦ 2
+| 3 => λ _ ↦ 3
+
+theorem quad_hex_embedding_is_embedding :
+  ∀ i : Fin 4, ∀ x : ℤ×ℤ, rect i x = hex (quad_hex_embedding i x) x
+  | 0 => λ _ ↦ rfl
+  | 1 => λ _ ↦ rfl
+  | 2 => λ _ ↦ rfl
+  | 3 => λ _ ↦ rfl
+
+
+theorem tri_quad_embedding_is_embedding :
+  ∀ i : Fin 3, ∀ x : ℤ×ℤ, tri i x = rect (tri_quad_embedding i x) x
+  | 0 => λ x ↦ rfl
+  | 1 => λ x ↦ rfl
+  | 2 => λ x ↦ by
+    by_cases h: Even (x.1+x.2)-- "show" thanks to Johan Commelin
+    show (if Even (x.1 + x.2) then sp x else sm x)  = rect (tri_quad_embedding 2 x) x
+    rw [if_pos h];
+    have : tri_quad_embedding 2 x = 2 := by
+      show (if Even (x.1 + x.2) then 2 else 3) = 2; simp; tauto
+    . rw [this]; rfl
+    have : tri_quad_embedding 2 x = 3 := by
+      show (if Even (x.1 + x.2) then 2 else 3) = 3; simp; tauto
+    rw [this];
+    show (if Even (x.1 + x.2) then sp x else sm x) = sm x
+    . simp; tauto
+
+end Embedding_one_protein_folding_model_into_another
+
+section Left_and_right_injectivity
+
+def left_injective {α:Type} {β γ: Type} [Fintype β] (go : β → α → γ)
+[DecidableEq α] := ∀ a, Function.Injective (λ b ↦ go b a)
+
+def right_injective {α:Type} {β γ: Type} [Fintype β] (go : β → α → γ)
+[DecidableEq α] := ∀ b, Function.Injective (λ a ↦ go b a)
+
+
+theorem tri_quad_embedding_left_injective :
+left_injective tri_quad_embedding := by
+  unfold left_injective at *
+  intro x
+  intro a b hab
+  simp at *
+  unfold tri_quad_embedding at *
+  contrapose hab
+
+  match a with
+  | 0 => match b with
+    | 0 => tauto
+    | 1 => (conv => right;left;whnf);(conv => right;right;whnf);simp
+    | 2 =>
+      conv => right;left;whnf;
+      have : (match (motive := Fin 3 → ℤ × ℤ → Fin 4) 2 with
+      | 0 => fun _ => 0
+      | 1 => fun _ => 1
+      | 2 => fun x => if Even (x.1 + x.2) then (2:Fin 4) else 3)
+        = fun x : ℤ×ℤ => if Even (x.1 + x.2) then (2:Fin 4) else 3
+         := rfl
+      rw [this];simp
+      by_cases h : Even (x.1+x.2)
+      rw [if_pos h];intro hc
+      let Q := congr_arg (λ x ↦ x.1) hc;simp at Q
+      rw [if_neg h];intro hc
+      let Q := congr_arg (λ x ↦ x.1) hc;simp at Q;tauto
+  | 1 => match b with
+    | 1 => tauto
+    | 0 => (conv => right;left;whnf);(conv => right;right;whnf);simp
+    | 2 =>
+      conv => right;left;whnf;
+      have : (match (motive := Fin 3 → ℤ × ℤ → Fin 4) 2 with
+      | 0 => fun _ => 0
+      | 1 => fun _ => 1
+      | 2 => fun x => if Even (x.1 + x.2) then (2:Fin 4) else 3)
+        = fun x : ℤ×ℤ => if Even (x.1 + x.2) then (2:Fin 4) else 3
+         := rfl
+      rw [this];simp
+      by_cases h : Even (x.1+x.2)
+      rw [if_pos h];intro hc
+      let Q := congr_arg (λ x ↦ x.1) hc;simp at Q
+      rw [if_neg h];intro hc
+      let Q := congr_arg (λ x ↦ x.1) hc;
+      simp at Q;
+      ring_nf at Q
+      apply Nat.succ_injective at Q
+      tauto
+
+  | 2 => match b with
+    | 1 =>
+      conv => right;right;whnf;
+      have : (match (motive := Fin 3 → ℤ × ℤ → Fin 4) 2 with
+      | 0 => fun _ => 0
+      | 1 => fun _ => 1
+      | 2 => fun x => if Even (x.1 + x.2) then (2:Fin 4) else 3)
+        = fun x : ℤ×ℤ => if Even (x.1 + x.2) then (2:Fin 4) else 3
+         := rfl
+      rw [this];simp
+      by_cases h : Even (x.1+x.2)
+      rw [if_pos h];intro hc
+      let Q := congr_arg (λ x ↦ x.1) hc;simp at Q
+      rw [if_neg h];intro hc
+      let Q := congr_arg (λ x ↦ x.1) hc;
+      simp at Q;
+      ring_nf at Q
+      apply Nat.succ_injective at Q
+      tauto
+
+    | 0 =>
+      conv => right;right;whnf;
+      have : (match (motive := Fin 3 → ℤ × ℤ → Fin 4) 2 with
+      | 0 => fun _ => 0
+      | 1 => fun _ => 1
+      | 2 => fun x => if Even (x.1 + x.2) then (2:Fin 4) else 3)
+        = fun x : ℤ×ℤ => if Even (x.1 + x.2) then (2:Fin 4) else 3
+         := rfl
+      rw [this];simp
+      by_cases h : Even (x.1+x.2)
+      rw [if_pos h];intro hc
+      let Q := congr_arg (λ x ↦ x.1) hc;simp at Q
+      rw [if_neg h];intro hc
+      let Q := congr_arg (λ x ↦ x.1) hc;
+      simp at Q;
+      ring_nf at Q
+      tauto
+    | 2 => tauto
+
+theorem sp_injective : Function.Injective sp := by
+  intro x y hxy
+  unfold sp at *
+  simp at hxy;tauto
+
+theorem sm_injective : Function.Injective sm := by
+  intro x y hxy
+  unfold sm at *
+  simp at hxy;tauto
+
+
+theorem go_WS_injective : Function.Injective go_WS := by
+  intro x y hxy
+  unfold go_WS at *
+  by_cases hx : Even (x.1 + x.2)
+  rw [if_pos hx] at hxy
+  by_cases hy : Even (y.1 + y.2)
+  rw [if_pos hy] at hxy
+  . exact sp_injective hxy
+  rw [if_neg hy] at hxy
+  unfold sp sm at hxy
+  let Q₁ := congr_arg (λ x ↦ x.1) hxy
+  simp at Q₁
+  let Q₂ := congr_arg (λ x ↦ x.2) hxy
+  simp at Q₂
+  rw [← Q₁] at hy
+  let T := congr_arg (λ x ↦ x + 1) Q₂
+  simp at T
+  have : x.2 + 2 = y.2 := by
+    rw [← T]
+    ring
+  rw [← this] at hy
+  rw [← add_assoc] at hy
+  rcases hx with ⟨k,hk⟩
+  rw [hk] at hy
+  contrapose hy
+  simp
+  exists (k+1)
+  ring
+  rw [if_neg hx] at hxy
+  by_cases hy : Even (y.1 + y.2)
+  rw [if_pos hy] at hxy
+  unfold sm sp at *
+
+  let Q₁ := congr_arg (λ x ↦ x.1) hxy
+  simp at Q₁
+  let Q₂ := congr_arg (λ x ↦ x.2) hxy
+  simp at Q₂
+  rw [← Q₁] at hy
+  let T := congr_arg (λ x ↦ x + 1) Q₂
+  simp at T
+  have : x.2 = y.2 + 2 := by
+    rw [T]
+    ring
+  rw [this] at hx
+  rw [← add_assoc] at hx
+  rcases hy with ⟨k,hk⟩
+  rw [hk] at hx
+  contrapose hx
+  simp
+  exists (k+1)
+  ring
+
+  rw [if_neg hy] at hxy
+  exact sm_injective hxy
+
+
+theorem right_injective_tri : right_injective tri := by
+  unfold tri
+  intro a; match a with
+  | 0 => exact add_left_injective _
+  | 1 => exact add_left_injective _
+  | 2 =>
+    intro x y hxy;
+    contrapose hxy
+    show ¬ go_WS x = go_WS y
+    contrapose hxy
+    simp at *
+    exact go_WS_injective hxy
+
+theorem left_injective_tri : left_injective tri := by
+intro x a b hab; simp at hab; contrapose hab; unfold tri;
+exact match a with
+| 0 => match b with
+  | 0 => by tauto
+  | 1 => by
+      conv => rhs;lhs;whnf
+      conv => rhs;rhs;whnf
+      simp
+  | 2 => by
+    show go_D x ≠ go_WS x;
+    unfold go_D go_WS sp sm;
+    by_cases h:(Even (x.1 + x.2)); rw [if_pos h]; simp; rw [if_neg h]; simp
+| 1 => match b with
+  | 0 => by
+      conv => rhs;lhs;whnf
+      conv => rhs;rhs;whnf
+      simp
+  | 1 => by tauto
+  | 2 => by
+    show go_A x ≠ go_WS x;
+    unfold go_A go_WS sp sm;
+    by_cases h:(Even (x.1 + x.2)); rw [if_pos h]; simp; rw [if_neg h]; simp
+| 2 => match b with
+  | 0 => by
+    show go_WS x   ≠ go_D x; unfold go_WS go_D sp sm;
+    by_cases h:(Even (x.1 + x.2)); rw [if_pos h]; simp; rw [if_neg h]; simp
+  | 1 => by
+    show go_WS x   ≠ go_A x; unfold go_WS go_A sm sp;
+    by_cases h:(Even (x.1 + x.2)); rw [if_pos h]; simp; rw [if_neg h]; simp
+  | 2 => by tauto
+
+
+
+theorem rectMap_injective : Function.Injective rectMap := by
+  decide
+
+theorem left_injective_hex : left_injective hex := by
+  unfold left_injective
+  intro a
+  unfold hex
+  intro x y hxy
+  simp at hxy
+  exact hexMap_injective hxy
+
+
+theorem left_injective_quad : left_injective rect := by
+  unfold left_injective
+  intro a
+  unfold rect
+  intro x y hxy
+  simp at hxy
+  exact rectMap_injective hxy
+
+
+theorem right_injective_quad : right_injective rect := by
+  unfold rect
+  intro a; match a with
+  | 0 => exact add_left_injective _
+  | 1 => exact add_left_injective _
+  | 2 => exact add_left_injective _
+  | 3 => exact add_left_injective _
+
+theorem right_injective_hex : right_injective hex := by
+  intro a;
+  match a with
+  | 0 => exact add_left_injective _
+  | 1 => exact add_left_injective _
+  | 2 => exact add_left_injective _
+  | 3 => exact add_left_injective _
+  | 4 => exact add_left_injective _
+  | 5 => exact add_left_injective _
+
+end Left_and_right_injectivity
+
+section Setting_up_point_earned
+theorem finfin {l : ℕ} {k: Fin l} (i : Fin k): i.1 < l := calc
+  _ < k.1 := i.isLt
+  _ < l   := k.isLt
+
+def nearby {α β : Type} [DecidableEq α] [Fintype β] (go : β → α → α)
+(p q : α) : Bool := ∃ a : β, q = go a p
+
+def pt_loc {α:Type} {β : Type} [Fintype β] (go : β → α → α) [DecidableEq α]
+ {l : ℕ} (fold : Vector α l) (i j : Fin l) (phobic : Vector Bool l) : Bool
+:=  phobic.get i && phobic.get j && i.1.succ < j.1 && nearby go (fold.get i) (fold.get j)
+
+def pts_at' {α:Type} {β : Type} [Fintype β] (go : β → α → α)
+[DecidableEq α] {l:ℕ} (k : Fin l) (ph : Vector Bool l) (fold : Vector α l) : ℕ :=
+  Finset.card (
+    Finset.filter (λ i : Fin l ↦ (pt_loc go fold i k ph))
+    Finset.univ
+  )
+/-
+  We prove that pts_at  = pts_at'.
+  pts_at' is more convenient type-theoretically, but
+  pts_at is more useful for proving a certain bound.
+-/
+def change_type  {α:Type} {β : Type} [Fintype β] (go : β → α → α)
+[DecidableEq α] {l:ℕ} (k : Fin l) (ph : Vector Bool l) (fold : Vector α l):
+Finset.filter (λ i : Fin l ↦ (pt_loc go fold i k ph)) Finset.univ
+→
+Finset.filter (λ i : Fin k ↦ (pt_loc go fold ⟨i.1,finfin i⟩ k ph)) Finset.univ
+  := by
+    intro ip; let Q := ip.2; rw [Finset.mem_filter] at Q -- Finset.mem_filter was key here
+    unfold pt_loc at Q;
+    have : ip.1.1.succ < k := by
+      simp at Q;tauto
+    exact ⟨⟨ip.1.1,Nat.lt_of_succ_lt this⟩,by rw [Finset.mem_filter];simp;tauto⟩
+
+
+theorem change_type_card  {α:Type} {β : Type} [Fintype β] (go : β → α → α)
+[DecidableEq α] {l:ℕ} (k : Fin l) (ph : Vector Bool l) (fold : Vector α l):
+Fintype.card (Finset.filter (λ i : Fin l ↦ (pt_loc go fold i k ph)) Finset.univ)
+=
+Fintype.card (Finset.filter (λ i : Fin k ↦ (pt_loc go fold ⟨i.1,finfin i⟩ k ph)) Finset.univ)
+:= by
+  suffices Function.Bijective (change_type go k ph fold) by
+    apply Fintype.card_of_bijective; exact this
+  constructor
+  intro i₁ i₂ hi; unfold change_type at hi; simp at hi
+  exact SetCoe.ext (Fin.ext hi)
+  intro i; let Q := i.2; rw [Finset.mem_filter] at Q
+  exists ⟨
+    ⟨i.1,finfin i.1⟩,
+    by rw [Finset.mem_filter]; constructor; simp; exact Q.2
+  ⟩
+
+
+
+def path_aux {α β: Type} {tail_length: ℕ}
+(go: β → α → α) (head: β) (tail_ih: Vector α (Nat.succ (tail_length)))
+: Vector α (Nat.succ (tail_length.succ)) := ⟨(go head tail_ih.head) :: tail_ih.1, by simp⟩
+
+/- Using OfNat here since ℤ×ℤ and ℤ×ℤ×ℤ have a natural notion of base point or zero.-/
+def path {α:Type} [OfNat α 0] {β : Type} (go : β → α → α) :
+(moves : List β) → Vector α moves.length.succ
+| [] => ⟨[0], rfl⟩
+| head :: tail => path_aux go head (path go tail)
+
+
+end Setting_up_point_earned
+
+
+section Equivalent_existential_definitions_of_point_earned
+
+
+def choice_ex {β:Type} [Fintype β] {l : ℕ} (P : β → Fin l → Prop)
+[DecidablePred fun a => ∃ i, P a i]
+[DecidablePred fun i => ∃ a, P a i]
+[∀ a, DecidablePred fun n => ∃ (hq : n < l), P a { val := n, isLt := hq }]
+:
+    (Finset.filter (λ a ↦ ∃ i, P a i) (Finset.univ : Finset β))
+ →  (Finset.filter (λ i ↦ ∃ a, P a i) (Finset.univ : Finset (Fin l)))
+:= by
+  intro a; let a₂ := a.2; simp at a₂
+  have h₀: ∃ (i : ℕ), ∃ (hi : i < l), P a ⟨i,hi⟩ := by
+    rcases a₂ with ⟨i,hi⟩; exists i.1; exists i.2
+  let i₁₁ := Nat.find h₀
+  have i₁₂: i₁₁ < l := (Nat.find_spec h₀).1
+  let i₁ := (⟨i₁₁,i₁₂⟩ : Fin l)
+  have i₂: i₁ ∈ Finset.filter (fun i => ∃ a, P a i) Finset.univ := by
+    simp; exists a; exact (Nat.find_spec h₀).2
+  let i := (⟨i₁,i₂⟩ : { x // x ∈ Finset.filter (fun i => ∃ a, P a i) Finset.univ })
+  exact i
+
+lemma choice_ex_injective {β:Type} [Fintype β] {l : ℕ} {P : β → Fin l.succ → Prop}
+[DecidablePred fun a => ∃ i, P a i]
+[DecidablePred fun i => ∃ a, P a i]
+[ (a : β) → DecidablePred fun n => ∃ (hq : n < l.succ), P a { val := n, isLt := hq }]
+(h_unique_dir : ∀ i a₀ a₁, P a₀ i → P a₁ i → a₀ = a₁)
+:
+Function.Injective (choice_ex P) := by
+  intro a b hab
+  unfold choice_ex at hab
+  simp at hab
+
+  let a₂ := a.2; let b₂ := b.2
+  simp at a₂ b₂
+  rw [Fin.exists_iff] at a₂ b₂
+  let ia := (⟨Nat.find a₂, (Nat.find_spec a₂).1⟩ : Fin l.succ)
+  let ib := (⟨Nat.find b₂, (Nat.find_spec b₂).1⟩ : Fin l.succ)
+  have : ia = ib := Fin.mk_eq_mk.mpr hab
+
+  let hia := Nat.find_spec a₂
+  let hib := Nat.find_spec b₂
+  have hib₂: P b ib := hib.2
+
+  rw [← this] at hib₂
+  exact Subtype.ext (h_unique_dir ia a b hia.2 hib₂)
+
+lemma choice_ex_aux {β:Type} [Fintype β] {l : ℕ} {P: β → Fin l → Prop}
+[DecidablePred fun i => ∃ a, P a i] [DecidablePred fun a => ∃ i, P a i]
+[(a : β) → DecidablePred fun n => ∃ (hq : n < l), P a { val := n, isLt := hq }]
+{i: { x // x ∈ Finset.filter (fun i => ∃ a, P a i) Finset.univ }}
+{a: β} (ha : P a i)
+:            P a ((choice_ex P ⟨a, (by simp; exists i)⟩) : Fin l)
+:= by
+    have witness:  ∃ j, ∃ (h : j < l), P a ⟨j,h⟩
+      := by exists i; exists i.1.2;
+    exact (Nat.find_spec witness).2
+
+lemma choice_ex_surjective {β:Type} [Fintype β] {l : ℕ} {P : β → Fin l.succ → Prop}
+[DecidablePred fun a => ∃ i, P a i]
+[DecidablePred fun i => ∃ a, P a i]
+[ (a : β) → DecidablePred fun n => ∃ (hq : n < l.succ), P a { val := n, isLt := hq }]
+(h_unique_loc : ∀ a i₀ i₁, P a i₀ → P a i₁ → i₀ = i₁)
+:
+Function.Surjective (choice_ex P) := by
+  intro i; let i₂ := i.2; simp at i₂;
+  rcases i₂ with ⟨a,ha⟩
+  exists ⟨a,by simp; exists i⟩
+  let j := choice_ex P ⟨
+    a,
+    (by simp; exists i : a ∈ Finset.filter (fun a => ∃ i, P a i) Finset.univ)
+  ⟩
+  show j = i
+  have : P a (choice_ex P ⟨a, (by simp; exists i)⟩) := choice_ex_aux ha
+  let Q := h_unique_loc a i j ha this
+  exact Subtype.ext Q.symm
+
+lemma choice_ex_bijective {β:Type} [Fintype β] {l : ℕ} {P : β → Fin l.succ → Prop}
+  [DecidablePred fun a => ∃ i, P a i]
+  [DecidablePred fun i => ∃ a, P a i]
+  [ (a : β) → DecidablePred fun n => ∃ (hq : n < l.succ), P a { val := n, isLt := hq }]
+  (h_unique_loc : ∀ a i₀ i₁, P a i₀ → P a i₁ → i₀ = i₁)
+  (h_unique_dir : ∀ i a₀ a₁, P a₀ i → P a₁ i → a₀ = a₁)
+  : Function.Bijective (choice_ex P) := And.intro
+    (choice_ex_injective  h_unique_dir)
+    (choice_ex_surjective h_unique_loc)
+
+theorem choice_ex_finset_card {β:Type} [Fintype β] {l : ℕ} {P : β → Fin l.succ → Prop}
+-- Completed February 16, 2024
+[DecidablePred fun a => ∃ i, P a i]
+[DecidablePred fun i => ∃ a, P a i]
+[(a : β) → DecidablePred fun n => ∃ (hq : n < l.succ), P a     ⟨n,hq⟩]
+(h_unique_loc_dir : (∀ a i₀ i₁, P a i₀ → P a i₁ → i₀ = i₁) ∧ ∀ i a₀ a₁, P a₀ i → P a₁ i → a₀ = a₁):
+Finset.card (Finset.filter (λ a ↦ ∃ i, P a i) Finset.univ) =
+Finset.card (Finset.filter (λ i ↦ ∃ a, P a i) Finset.univ)
+:= by
+  suffices Fintype.card (Finset.filter (λ a ↦ ∃ i, P a i) (Finset.univ : Finset (β))) =
+           Fintype.card (Finset.filter (λ i ↦ ∃ a, P a i) (Finset.univ : Finset (Fin l.succ))) by
+    repeat (rw [← Fintype.card_coe])
+    exact this
+  exact Fintype.card_of_bijective (choice_ex_bijective h_unique_loc_dir.1 h_unique_loc_dir.2)
+end Equivalent_existential_definitions_of_point_earned
+
+
+section Main_theoretical_development
+
+-- Extend a map on moves to lists:
+def morph {α:Type} [OfNat α 0] {b₀ b₁ : ℕ} (f : Fin b₀ → α → Fin b₁)
+(go₀ : Fin b₀ → α → α) (l : List (Fin b₀)) : List (Fin b₁) := by
+induction l; exact []; exact (f head (path go₀ tail).head) :: tail_ih
+
+-- morph is length-preserving:
+theorem morph_len {α:Type} [OfNat α 0] {b₀ b₁ : ℕ} (f : Fin b₀ → α → Fin b₁)
+(go₀ : Fin b₀ → α → α) (l : List (Fin b₀)) :
+(morph f go₀ l).length = l.length := by
+  induction l; unfold morph; rfl; unfold morph; repeat (rw [List.length_cons])
+  simp; rw [← tail_ih]; congr
+
+theorem nearby_of_embeds {α:Type} [DecidableEq α] {b₀ b₁ : ℕ}
+{go₀ : Fin b₀ → α → α} {go₁ : Fin b₁ → α → α} (h_embed : embeds_in go₀ go₁)
+ {x y : α} (hn : nearby go₀ x y):
+nearby go₁ x y := by
+  unfold nearby at hn; simp at hn; rcases hn with ⟨a,ha⟩; let Q := h_embed a x
+  unfold nearby; simp; rw [ha]; tauto
+
+
+theorem pt_loc_of_embeds
+ {α:Type} [DecidableEq α] {b₀ b₁ : ℕ}
+{go₀ : Fin b₀ → α → α} {go₁ : Fin b₁ → α → α} (h_embed : embeds_in go₀ go₁)
+ {l:ℕ}
+  (fold : Vector α l) (a b : Fin l) (phobic : Vector Bool l)
+  (htri: pt_loc go₀ fold a b phobic) :
+         pt_loc go₁ fold a b phobic := by
+  unfold pt_loc at *; simp at *; constructor; tauto; exact nearby_of_embeds h_embed htri.2
+
+
+theorem pts_at_of_embeds' {α:Type} [DecidableEq α] {b₀ b₁ : ℕ}
+{go₀ : Fin b₀ → α → α} {go₁ : Fin b₁ → α → α} (h_embed : embeds_in go₀ go₁)
+{l:ℕ} (k:Fin l) (ph : Vector Bool l) (fold : Vector α l):
+pts_at' go₀ k ph fold ≤
+pts_at' go₁ k ph fold := by
+  unfold pts_at'; apply Finset.card_le_card; intro a ha; simp; simp at ha
+  exact pt_loc_of_embeds h_embed fold a k ph ha
+
+open BigOperators
+
+
+def pts_tot' {α:Type} {β : Type} [Fintype β] (go : β → α → α) [DecidableEq α]
+ {l:ℕ} (ph : Vector Bool l)(fold : Vector α l)
+  := ∑ i : Fin l, pts_at' go i ph (fold)
+
+def pts_tot {α:Type} {β : Type} [Fintype β] (go : β → α → α) [DecidableEq α]
+ {l:ℕ} (ph : Vector Bool l)(fold : Vector α l)
+  := ∑ i : {i₀ : Fin l // ph.get i₀}, pts_at' go i ph (fold)
+
+
+theorem pts_bound_of_embeds {α:Type} [DecidableEq α] {b₀ b₁ : ℕ}
+{go₀ : Fin b₀ → α → α} {go₁ : Fin b₁ → α → α} (h_embed : embeds_in go₀ go₁)
+{l:ℕ} (ph : Vector Bool l) (fold : Vector α l):
+pts_tot go₀ ph fold ≤
+pts_tot go₁ ph fold := by
+  unfold pts_tot; apply Finset.sum_le_sum; intros; exact pts_at_of_embeds' h_embed _ _ _
+
+
+theorem pts_bound_of_embeds' {α:Type} [DecidableEq α] {b₀ b₁ : ℕ}
+{go₀ : Fin b₀ → α → α} {go₁ : Fin b₁ → α → α} (h_embed : embeds_in go₀ go₁)
+{l:ℕ} (ph : Vector Bool l) (fold : Vector α l):
+pts_tot' go₀ ph fold ≤
+pts_tot' go₁ ph fold := by
+  unfold pts_tot'; apply Finset.sum_le_sum; intros; exact pts_at_of_embeds' h_embed _ _ _
+
+
+-- We now seek an upper bound for the objective function in protein folding.
+
+def pts_at {α:Type} {β : Type} [Fintype β] (go : β → α → α)
+[DecidableEq α] {l:ℕ} (k : Fin l) (ph : Vector Bool l) (fold : Vector α l) : ℕ :=
+  Finset.card (
+    Finset.filter (λ i : Fin k ↦ (pt_loc go fold ⟨i.1,finfin i⟩ k ph))
+    Finset.univ
+  )
+
+theorem pts_at_eq_pts_at'  {α:Type} {β : Type} [Fintype β] (go : β → α → α)
+[DecidableEq α] {l:ℕ} (k : Fin l) (ph : Vector Bool l) (fold : Vector α l):
+pts_at go k ph fold = pts_at' go k ph fold :=
+by unfold pts_at pts_at'; (repeat rw [← Fintype.card_coe]); exact (change_type_card go k ph fold).symm
+
+lemma pts_at_bound' {α:Type} [DecidableEq α]
+{β : Type} [Fintype β]
+(go : β → α → α)
+{l:ℕ} (ph : Vector Bool l) (fold : Vector α l) (i:Fin l):
+pts_at' go i ph fold ≤ i := by
+  rw [← pts_at_eq_pts_at', ← Finset.card_fin i.1]; apply Finset.card_le_card; apply Finset.filter_subset
+
+lemma Fin_sum_range (i : ℕ)  :
+∑ j : Fin (i+1), j.1 = i.succ * i / 2
+ := by let Q := Finset.sum_range_id i.succ; simp at Q; rw [← Q]; exact (Finset.sum_range fun i => i).symm
+
+
+
+theorem pts_earned_bound_loc' {α:Type} [DecidableEq α] {β : Type} [Fintype β] (go : β → α → α)
+{l:ℕ} (ph : Vector Bool l.succ) (fold : Vector α l.succ):
+pts_tot' go ph fold ≤ l.succ * l / 2 := by
+  suffices pts_tot' go ph fold ≤ ∑ j : Fin l.succ, j.1 by calc
+    _ ≤ ∑ j : Fin l.succ, j.1 := this
+    _ = _                     := Fin_sum_range _
+  unfold pts_tot'; apply Finset.sum_le_sum; intro i; intro; exact pts_at_bound' go ph fold i
+
+
+lemma path_len {α: Type} [OfNat α 0] [DecidableEq α] {β: Type}
+(go: β → α → α) {l: ℕ} (moves: Vector β l)
+: (path go moves.1).1.length = l.succ
+:= by rw [(path go moves.1).2]; simp
+
+def pathVec {l:ℕ}{α:Type} [OfNat α 0] [DecidableEq α] {β : Type} (go : β → α → α)
+(moves : Vector β l) : Vector α l.succ := ⟨(path go moves.1).1,path_len _ _⟩
+
+def pt_dir {α:Type} [OfNat α 0] [DecidableEq α] {β : Type} (go : β → α → α)
+ {l:ℕ} (j : Fin l.succ) (moves: Vector β l) (ph : Vector Bool l.succ)
+: β → Fin l.succ → Prop  := λ a i ↦
+  ph.get i ∧ ph.get j ∧ i.1.succ < j ∧ (pathVec go moves).get j = go a ((pathVec go moves).get i)
+
+
+theorem unique_loc  {α: Type} [OfNat α 0] [DecidableEq α] {β: Type} [Fintype β]
+(go: β → α → α)
+ {l:ℕ} (j: Fin l.succ)
+  (moves: Vector β l) (ph : Vector Bool l.succ)
+  (path_inj: Function.Injective (λ k : Fin l.succ ↦ (pathVec go moves).get k))
+  (right_inj: right_injective go)
+  :
+  ∀ (a : β) (i₀ i₁ : Fin l.succ) (_ : pt_dir go j moves ph a i₀) (_ : pt_dir go j moves ph a i₁),
+  i₀ = i₁
+  := λ a _ _ hai₀ hai₁ ↦ path_inj (right_inj a (Eq.trans hai₀.2.2.2.symm hai₁.2.2.2))
+
+theorem unique_dir {α: Type} [OfNat α 0] [DecidableEq α] {β: Type} [Fintype β]
+(go: β → α → α) {l:ℕ} (j: Fin l.succ)
+  (moves: Vector β l) (ph : Vector Bool l.succ)
+  (left_inj : left_injective go)
+  :
+  ∀ (i : Fin l.succ) (a₀ a₁ : β)
+  (_ : pt_dir go j moves ph a₀ i)
+  (_ : pt_dir go j moves ph a₁ i),
+  a₀ = a₁
+  := λ i _ _ hai₀ hai₁ ↦ left_inj ((pathVec go moves).get i) ((Eq.trans hai₀.2.2.2.symm hai₁.2.2.2))
+
+theorem unique_loc_dir {α: Type} [OfNat α 0] [DecidableEq α] {β: Type} [Fintype β]
+{go: β → α → α} {l:ℕ} {j: Fin l.succ}
+  {moves: Vector β l} {ph : Vector Bool l.succ}
+  (path_inj: Function.Injective (λ k : Fin l.succ ↦ (pathVec go moves).get k))
+  (right_inj: right_injective go)
+  (left_inj : left_injective go)
+  :
+  (∀ (a : β) (i₀ i₁ : Fin l.succ) (_ : pt_dir go j moves ph a i₀) (_ : pt_dir go j moves ph a i₁),
+  i₀ = i₁) ∧ (  ∀ (i : Fin l.succ) (a₀ a₁ : β)
+  (_ : pt_dir go j moves ph a₀ i)
+  (_ : pt_dir go j moves ph a₁ i),
+  a₀ = a₁
+) := And.intro (unique_loc go j _ ph path_inj right_inj)
+               (unique_dir go j _ ph left_inj)
+
+theorem left_injective_of_embeds_in_strongly {α: Type} [OfNat α 0] [DecidableEq α]
+{b : ℕ}
+{go₀ go₁ : Fin b → α → α}
+(f: Fin b → α → Fin b)
+(is_emb: is_embedding go₀ go₁ f)
+(left_inj_emb : left_injective f) -- which we can prove for tri_quad_embedding although it's harder than left_injective_tri!
+(left_inj_go: left_injective go₁)
+:
+left_injective go₀ := by
+  intro x a₀ a₁ hxy
+  simp at hxy
+  rw [is_emb a₀ x,is_emb a₁ x] at hxy
+  exact left_inj_emb x (left_inj_go x hxy)
+
+
+theorem unique_loc_dir_quad {l:ℕ} (j: Fin l.succ) -- location, direction
+  (moves: Vector (Fin 4) l) (ph : Vector Bool l.succ)
+  (path_inj: Function.Injective (λ k : Fin l.succ ↦ (pathVec rect moves).get k)):
+  (∀ (a : Fin 4) (i₀ i₁ : Fin l.succ) (_ : pt_dir rect j moves ph a i₀) (_ : pt_dir rect j moves ph a i₁),
+  i₀ = i₁) ∧ (  ∀ (i : Fin l.succ) (a₀ a₁ : Fin 4)
+  (_ : pt_dir rect j moves ph a₀ i)
+  (_ : pt_dir rect j moves ph a₁ i),
+  a₀ = a₁
+) :=  unique_loc_dir path_inj right_injective_quad left_injective_quad
+
+theorem unique_loc_dir_hex {l:ℕ} (j: Fin l.succ)
+  (moves: Vector (Fin 6) l) (ph : Vector Bool l.succ)
+  (path_inj: Function.Injective (λ k : Fin l.succ ↦ (pathVec hex moves).get k)):
+  (∀ (a : Fin 6) (i₀ i₁ : Fin l.succ) (_ : pt_dir hex j moves ph a i₀) (_ : pt_dir hex j moves ph a i₁),
+  i₀ = i₁) ∧ (  ∀ (i : Fin l.succ) (a₀ a₁ : Fin 6)
+  (_ : pt_dir hex j moves ph a₀ i)
+  (_ : pt_dir hex j moves ph a₁ i),
+  a₀ = a₁
+) := unique_loc_dir path_inj right_injective_hex left_injective_hex
+
+-- This trivial instance is nonetheless needed:
+instance  {α: Type} [OfNat α 0] [DecidableEq α] {b:ℕ}
+{go: Fin b → α → α}
+  {l:ℕ} (j : Fin l.succ) (ph : Vector Bool l.succ) (moves: Vector (Fin b) l) (a : Fin b)
+(i : Fin l.succ)
+: Decidable (pt_dir go j moves ph a i) := decidable_of_iff (Vector.get ph i = true ∧
+      Vector.get ph j = true ∧
+        Nat.succ ↑i < ↑j ∧
+        Vector.get (pathVec go moves) j = go a (Vector.get (pathVec go moves) i)) (by
+          unfold pt_dir;tauto
+        )
+
+theorem pts_at'_dir {α: Type} [OfNat α 0] [DecidableEq α] {b:ℕ}
+{go: Fin b → α → α}
+  {l:ℕ} (j : Fin l.succ) (ph : Vector Bool l.succ)
+  (moves: Vector (Fin b) l)
+  (path_inj : (Function.Injective fun k => Vector.get (pathVec go moves) k))
+  (right_inj: right_injective go)
+  (left_inj: left_injective go)
+  : pts_at' go j ph (pathVec go moves) ≤ b := by
+    unfold pts_at'
+    have : Finset.filter (
+        λ i : Fin (Nat.succ l) ↦ (∃ a, pt_dir go j moves ph a i)) Finset.univ =
+          Finset.filter (
+        λ i : Fin (Nat.succ l) ↦  pt_loc go (pathVec go moves) i j ph) Finset.univ
+    := by
+      apply Finset.ext;intro i;repeat (rw [Finset.mem_filter]);simp;
+      unfold pt_dir pt_loc nearby; simp; tauto
+    rw [← this,← choice_ex_finset_card (unique_loc_dir path_inj right_inj left_inj)]
+    apply card_finset_fin_le
+
+theorem pts_earned_bound_dir' {α: Type} [OfNat α 0] [DecidableEq α] {b:ℕ}
+{go: Fin b → α → α}
+{l:ℕ} (ph : Vector Bool l.succ)
+(moves: Vector (Fin b) l)
+(path_inj  : (Function.Injective fun k => Vector.get (pathVec go moves) k))
+(right_inj : right_injective go)
+(left_inj  : left_injective go)
+: pts_tot' go ph (pathVec go moves) ≤ l.succ * b := by
+  suffices pts_tot' go ph (pathVec go moves) ≤ ∑ j : Fin l.succ, b by
+    simp at this; tauto
+  apply Finset.sum_le_sum; intro i; intro
+  exact pts_at'_dir i ph moves path_inj right_inj left_inj
+
+
+theorem pts_earned_bound' {α: Type} [OfNat α 0] [DecidableEq α] {b:ℕ}
+{go: Fin b → α → α}
+{l:ℕ} (ph : Vector Bool l.succ)
+(moves: Vector (Fin b) l)
+(path_inj : (Function.Injective fun k => Vector.get (pathVec go moves) k))
+(right_inj : right_injective go)
+(left_inj : left_injective go)
+
+: pts_tot' go ph (pathVec go moves) ≤ min (l.succ * b) (l.succ * l / 2)
+:= by
+  suffices (
+    pts_tot' go ph (pathVec go moves) ≤ l.succ * b
+    ∧ pts_tot' go ph (pathVec go moves) ≤ l.succ * l / 2) by
+    exact Nat.le_min.mpr this
+  constructor
+  exact pts_earned_bound_dir' ph moves path_inj right_inj left_inj
+  exact pts_earned_bound_loc' go ph (pathVec go moves)
+
+
+theorem two_heads {α : Type} {k :ℕ} (v: Vector α k.succ) (w : List α) (hw : w ≠ [])
+(h : v.1 = w) : Vector.head v = List.head w hw := by
+  symm at h; cases w; tauto; simp
+  have : v = head ::ᵥ ⟨tail,by let v2 := v.2; rw [← h] at v2; simp at v2; tauto⟩ := by
+    apply Vector.eq; simp; rw [h]; rfl
+  rw [this]; simp
+
+theorem path_cons {α:Type} [OfNat α 0] [DecidableEq α] {b₀ : ℕ}
+(go₀ : Fin b₀ → α → α)
+(head : Fin b₀) (tail : List (Fin b₀))
+   : (path go₀ (head ::        tail)).1 =
+             ((go₀  head (path go₀ tail).head) :: (path go₀ tail).1) := rfl
+
+theorem path_len' {α: Type} [OfNat α 0] [DecidableEq α] {β: Type}
+(go: β → α → α) (l: ℕ) (moves: List β) (hm: moves.length = l)
+: List.length (path go moves).1 = Nat.succ l
+:= by rw [(path go moves).2,hm]
+
+lemma path_nil {α:Type} [OfNat α 0] [DecidableEq α] {β:Type} [Fintype β]
+(go : β → α → α):
+(path go []).1 = [0] := rfl
+
+def ne_nil_of_succ_length {α :Type} {k:ℕ}
+(tail_ih: Vector α k.succ)
+: tail_ih.1 ≠ [] := by
+    have : tail_ih.1.length = k.succ := tail_ih.2
+    intro hc; rw [hc] at this; contrapose this; simp
+
+lemma path_eq_path_morph {α:Type} [OfNat α 0] [DecidableEq α] {b₀ b₁ : ℕ} (f : Fin b₀ → α → Fin b₁)
+(go₀ : Fin b₀ → α → α) (go₁ : Fin b₁ → α → α)
+(g : is_embedding go₀ go₁ f)
+(moves : List (Fin b₀)):
+  (path go₀ moves).1 = (path go₁ (morph f go₀ moves)).1 := by
+    induction moves
+    . unfold morph; simp; repeat (rw [path_nil])
+    rw [path_cons,g head (Vector.head (path go₀ tail)),tail_ih ]
+    unfold morph; simp; rw [path_cons]; simp
+    have : (Vector.head (path go₀ tail))
+         = (Vector.head (path go₁ (List.rec [] (fun head tail tail_ih => f head (Vector.head (path go₀ tail)) :: tail_ih) tail)))
+    := by
+      rw [two_heads (path go₀ tail) (path go₀ tail).1 (ne_nil_of_succ_length _) rfl]
+      simp_rw [tail_ih]
+      rw [two_heads]
+      unfold morph
+      simp
+    exact congrArg _ this
+
+
+def path_transformed {α: Type} [OfNat α 0] [DecidableEq α] {b₀ b₁: ℕ}
+(f: Fin b₀ → α → Fin b₁) (go₀: Fin b₀ → α → α) (go₁: Fin b₁ → α → α)
+(l: List (Fin b₀)) : Vector α l.length.succ :=
+  ⟨
+    (path go₁ (morph f go₀ l)).1,
+    by rw [path_len go₁ ⟨morph f go₀ l, morph_len f go₀ l⟩]
+  ⟩
+
+
+/- Finished February 10, 2024:
+When transforming, the underlying path in say ℤ×ℤ is unchanged.
+-/
+theorem transform_of_embed {α:Type} [OfNat α 0] [DecidableEq α] {b₀ b₁ : ℕ} (f : Fin b₀ → α → Fin b₁)
+(go₀ : Fin b₀ → α → α) (go₁ : Fin b₁ → α → α)
+ (l : List (Fin b₀)) (h_embed: is_embedding go₀ go₁ f):
+ path_transformed f go₀ go₁ l = path go₀ l
+:= by
+  apply SetCoe.ext; unfold path_transformed; simp; unfold is_embedding at h_embed; induction l; simp; unfold morph; simp
+  . rfl
+  have morph_cons : (morph f go₀ (head :: tail)) = (f head ((path go₀ tail).head)) :: (morph f go₀ (tail)) := rfl
+  rw [morph_cons];
+  repeat (rw [path_cons])
+  simp
+  constructor
+  let a := (Vector.head (path go₀ tail))
+  rw [h_embed head a]
+  simp
+  have : path go₁ (morph f go₀ tail)
+     = ⟨(path go₀ tail).1,(by rw [morph_len]; exact (path go₀ tail).2)⟩
+    := Vector.eq _ _ (by unfold Vector.toList; rw [← tail_ih])
+  rw [this]
+  have hau: ∃ a u, path go₀ tail = a ::ᵥ u := Vector.exists_eq_cons (path go₀ tail)
+  have : Vector.head ⟨
+        (path go₀ tail).1, ((by rw [morph_len]; exact (path go₀ tail).2)
+        : (path go₀ tail).1.length = (morph f go₀ tail).length.succ
+        )⟩ = Vector.head (path go₀ tail)
+  := by
+    rcases hau with ⟨a,ha⟩; rcases ha with ⟨u,hu⟩
+    . rw [hu]; simp; rfl
+  . exact congr_arg _ this
+  . rw [tail_ih]
+
+
+def pts_tot_bound {α:Type} [OfNat α 0] [DecidableEq α]
+{β : Type} [Fintype β]
+(go : β → α → α) {l:ℕ} (ph : Vector Bool l.succ) (q : ℕ) :=
+∀ moves : Vector β l,
+Function.Injective (λ k ↦ (path go moves.1).1.get k)
+→
+pts_tot' go ph (⟨(path go moves.1).1,path_len _ _⟩) ≤ q
+
+instance {α:Type} [OfNat α 0] [DecidableEq α] {β : Type} [Fintype β]
+(go : β → α → α) {l:ℕ} (ph : Vector Bool l.succ) (q : ℕ):
+DecidablePred (pts_tot_bound go moves)
+:= by
+  unfold pts_tot_bound pts_tot'
+  exact inferInstance
+
+instance {α:Type} [OfNat α 0] [DecidableEq α] {β : Type} [Fintype β]
+(go : β → α → α) : DecidablePred fun n => pts_tot_bound go ph n :=
+  by
+  unfold pts_tot_bound pts_tot'
+  exact inferInstance
+
+theorem pts_tot_bound_exists {α:Type} [OfNat α 0] [DecidableEq α]
+{β : Type} [Fintype β] (go : β → α → α) {l:ℕ} (ph : Vector Bool l.succ) :
+∃ q, pts_tot_bound go ph q := by
+  exists l.succ * l / 2; intro moves
+  let Q := pts_earned_bound_loc' go ph (⟨(path go moves.1).1,path_len _ _⟩)
+  tauto
+
+/- HP is the HP protein folding model "objective function" or "value function": -/
+def HP {α:Type} [OfNat α 0] [DecidableEq α] {β : Type} [Fintype β]
+(go : β → α → α) {l:ℕ} (ph : Vector Bool l.succ) :ℕ := Nat.find (pts_tot_bound_exists go ph)
+/- ph has to be of succ type because there will at least be an amino acid at the origin. -/
+
+def P_tri'  {l:ℕ} := λ ph : Vector Bool l.succ ↦ HP tri  ph
+def P_rect' {l:ℕ} := λ ph : Vector Bool l.succ ↦ HP rect ph
+def P_hex'  {l:ℕ} := λ ph : Vector Bool l.succ ↦ HP hex  ph
+
+theorem vector_inj_of_list_inj {t : Type} {n : ℕ}
+{v : Vector t n} (h: Function.Injective fun k => List.get v.1 k) :
+Function.Injective fun k => Vector.get v k := by
+  intro x y hxy
+  unfold Function.Injective at *
+  simp at hxy
+  have hx: x.1 < v.1.length := by
+    let Q := x.2
+    have : v.1.length = n := v.2
+    simp_rw [← this] at Q
+    exact Q
+  have hy: y.1 < v.1.length := by
+    let Q := y.2
+    have : v.1.length = n := v.2
+    simp_rw [← this] at Q
+    exact Q
+  have : List.get v.1 ⟨x.1,hx⟩ = List.get v.1 ⟨y,hy⟩ := by exact hxy
+  let Q := h this
+  simp at Q
+  exact Fin.ext Q
+
+
+theorem list_inj_of_vector_inj {t : Type} {n : ℕ}
+{v : Vector t n} (h: Function.Injective fun k => Vector.get v k) :
+Function.Injective fun k => List.get v.1 k := by
+  intro x y hxy
+  unfold Function.Injective at *
+  have : Vector.get ⟨v.1,rfl⟩ x = Vector.get ⟨v.1,rfl⟩ y := by exact hxy
+  have hx: x.1 < n := by
+    let Q := x.2
+    have : v.1.length = n := v.2
+    simp_rw [this] at Q
+    exact Q
+  have hy: y.1 < n := by
+    let Q := y.2
+    have : v.1.length = n := v.2
+    simp_rw [this] at Q
+    exact Q
+  have : Vector.get v ⟨x.1,hx⟩ = Vector.get v ⟨y.1,hy⟩ := by exact hxy
+  let Q := h this
+  simp at Q hxy
+  exact Fin.ext Q
+
+theorem P_tri_lin_bound
+{l:ℕ} (ph : Vector Bool l.succ)
+: P_tri' ph ≤ l.succ * 3 := by
+  suffices pts_tot_bound tri ph (l.succ * 3) by exact Nat.find_le this
+  intro moves path_inj
+  exact pts_earned_bound_dir' _ _ (vector_inj_of_list_inj path_inj) right_injective_tri left_injective_tri
+
+theorem P_hex_lin_bound
+{l:ℕ} (ph : Vector Bool l.succ)
+: P_hex' ph ≤ l.succ * 6 := by
+  suffices pts_tot_bound hex ph (l.succ * 6) by exact Nat.find_le this
+  intro moves path_inj
+  exact pts_earned_bound_dir' _ _ (vector_inj_of_list_inj path_inj) right_injective_hex left_injective_hex
+
+theorem P_rect_lin_bound
+{l:ℕ} (ph : Vector Bool l.succ)
+: P_rect' ph ≤ l.succ * 4 := by
+  suffices pts_tot_bound rect ph (l.succ * 4) by exact Nat.find_le this
+  intro moves path_inj
+  exact pts_earned_bound_dir' _ _ (vector_inj_of_list_inj path_inj) right_injective_quad left_injective_quad
+
+theorem value_bound_of_embeds_strongly {α:Type} [OfNat α 0] [DecidableEq α] {b₀ b₁ : ℕ}
+{go₀ : Fin b₀ → α → α}
+{go₁ : Fin b₁ → α → α}    (h_embed : go₀    ≼    go₁)
+{l:ℕ} (ph : Vector Bool l.succ) : HP go₀ ph ≤ HP go₁ ph := by
+  apply Nat.find_mono
+  intro q hq moves h_inj
+  let he := embeds_of_strongly_embeds h_embed
+  let Q := pts_bound_of_embeds' he ph (⟨(path go₀ moves.1).1,path_len _ _⟩)
+  rcases h_embed with ⟨f,hf⟩
+  let moves' := (
+    ⟨
+      morph f go₀ moves.1,
+      (by rw [morph_len]; exact moves.2)
+    ⟩ : Vector (Fin b₁) l)
+  have h_inj':
+  Function.Injective (λ k ↦ (path go₁ (morph f go₀ moves.1)).1.get k)
+  := by
+    let Q := transform_of_embed f go₀ go₁ (moves.1) hf
+    unfold path_transformed at Q
+    let R := congrArg (λ x ↦ x.1) Q
+    simp at R
+
+    rw [R]
+    tauto
+  have : (path go₀ moves.1).1 = (path go₁ (morph f go₀ moves.1)).1 :=
+    path_eq_path_morph f go₀ go₁ hf moves.1
+  calc
+  _ ≤ pts_tot' go₁ ph ⟨(path go₀  moves.1).1, path_len _ _⟩ := Q
+  _ = pts_tot' go₁ ph ⟨(path go₁ moves'.1).1, path_len _ _⟩ := by simp_rw [this]
+  _ ≤ q                                                    := hq moves' h_inj'
+
+theorem embeds_strongly_tri_quad : tri ≼ rect := by
+  exists tri_quad_embedding
+  exact tri_quad_embedding_is_embedding
+
+theorem embeds_strongly_quad_hex : rect ≼ hex := by
+  exists quad_hex_embedding
+  exact quad_hex_embedding_is_embedding
+
+/- Here are some quotable results:
+  The degree 3 "hexagonal lattice" protein folding model has an objective function
+  P_tri that is bounded by that of the usual HP 2D model.
+  Similarly for P_quad and P_hex.
+-/
+
+
+theorem HP_quad_bounds_tri {l:ℕ} (ph : Vector Bool l.succ) : HP tri ph ≤ HP rect ph :=
+  value_bound_of_embeds_strongly embeds_strongly_tri_quad _
+theorem HP_hex_bounds_quad {l:ℕ} (ph : Vector Bool l.succ) : HP rect ph ≤ HP hex ph :=
+  value_bound_of_embeds_strongly embeds_strongly_quad_hex _
+
+-- A sample combination of the two main threads of inequalities:
+theorem sample_combination_of_the_two_main_threads_of_inequalities
+{l:ℕ} (ph : Vector Bool l.succ):
+ HP rect ph ≤ l.succ * 6 := calc
+  _         ≤ HP hex ph  := HP_hex_bounds_quad ph
+  _         ≤ l.succ * 6 := P_hex_lin_bound ph
+
+#eval HP rect ⟨[true],rfl⟩
+-- #eval HP rect ⟨List.replicate 9 true,rfl⟩ -- 4
+#eval HP rect ⟨List.replicate 7 true,rfl⟩ -- 4
+#eval HP hex ⟨List.replicate 3 true,rfl⟩ -- amazing
+
+def first_nonzero_entry (w : List (Fin 4)) : Option (Fin 4) := by {
+  induction w
+  .  exact none
+  .  exact ite (tail_ih ≠ none) tail_ih (ite (head = 0) none head)
+}
+
+-- By symmetry we may assume that all walks (folds) are orderly, although that in itself could deserve a proof.
+def orderly (w: List (Fin 4)) := w.reverse.getLast? = some (0:Fin 4)
+      ∧ first_nonzero_entry w = some 2
+
+instance (w : List (Fin 4)) : Decidable (orderly w) := by unfold orderly; exact And.decidable
+
+def stecher (x : List Bool) (w: List (Fin 4)): ℕ := dite (w.length.succ = x.length)
+    (λ h ↦ pts_tot' -- or pts_tot
+      quad
+      (⟨x, rfl⟩ : Vector Bool x.length)
+      ⟨(path quad w).1,(by rw [← h,path_len'];rfl)⟩
+    )
+    (λ _ ↦ 0)
+
+def x : List Bool := [true,false,true,false,true,false, true,true]
+
+#eval HP rect ⟨x,rfl⟩ -- This evaluates to 3 quickly, don't even need the backtracking.
+#eval HP rect ⟨x ++ [false],rfl⟩-- This evaluates to 2 quickly, don't even need the backtracking.
+
+-- example: HP rect ⟨x ++ [false],rfl⟩ = 2 := by decide
+
+-- #eval stecher x [0, 3, 1, 1, 2, 2, 0]
+-- #eval stecher x [r2.D, r2.S, r2.A, r2.A, r2.W, r2.W, r2.D]
+-- #eval stecher (x ++ [false]) [0, 3, 1, 1, 2, 2, 0].reverse
+
+
+def stecher1 : Prop :=
+  those_with_suffix'
+    (λ w ↦ Function.Injective (λ i ↦ (path quad w).get i))
+    (λ w ↦ stecher x w > 2 ∧ orderly w)
+    (Gap_nil' 4 7)
+  = {⟨[0, 3, 3, 1, 1, 2, 0],rfl⟩} --{⟨[0, 3, 1, 1, 2, 2, 0],rfl⟩}
+instance : Decidable stecher1 := by {
+  unfold stecher1
+  apply decEq
+}
+
+-- #eval (myvec 4 7).length
+-- #eval stecher1
+
+def stecher2 : Prop :=
+those_with_suffix'
+    (λ w ↦ Function.Injective (λ i ↦ (path quad w).get i))
+    (
+      λ w ↦ stecher (x ++ [false]) w > 2
+        ∧ orderly w
+    )
+    (Gap_nil' 4 8) = ∅
+
+def stecher_conjecture_counterexample : Prop := stecher1  ∧ stecher2
+
+instance : Decidable stecher2 := by unfold stecher2; apply decEq
+instance : Decidable stecher_conjecture_counterexample := by
+  unfold stecher_conjecture_counterexample; unfold stecher1; unfold stecher2; exact And.decidable
+
+-- #eval stecher1
+-- #eval stecher2
+-- #eval stecher_conjecture_counterexample
+
+end Main_theoretical_development
+
+section Some_unnecessary_group_computations
 
 example : go_X ∘ go_W = id := by
   apply funext; intro x; unfold go_X go_W mm sp pp sm; simp; have h₁: x.2 - 1 = x.2 + -1 := rfl
@@ -184,115 +1294,7 @@ example : go_W ∘ go_X = id := by
 -- Analogously for tri:
 -- tri represents the degree-3 hexagonal/triangular lattice, although that in itself requires checking
 
-def go_WS : ℤ×ℤ → ℤ×ℤ := λ x ↦ ite (Even (x.1+x.2)) (sp x) (sm x)
-
-def tri : Fin 3 → ℤ×ℤ → ℤ×ℤ
-| 0 => go_D
-| 1 => go_A
-| 2 => go_WS
-
-
-def embeds_in {α:Type} {b₀ b₁ : ℕ} (go₀ : Fin b₀ → α → α)
-(go₁ : Fin b₁ → α → α) :=
-∀ i : Fin b₀, ∀ x : α, ∃ j : Fin b₁, go₀ i x = go₁ j x
-
-def is_embedding  {α:Type} {b₀ b₁ : ℕ} (go₀ : Fin b₀ → α → α)
-(go₁ : Fin b₁ → α → α) (f : Fin b₀ → α → Fin b₁) :=
-∀ i : Fin b₀, ∀ x : α, go₀ i x = go₁ (f i x) x
-
-def embeds_in_strongly {α:Type} {b₀ b₁ : ℕ} (go₀ : Fin b₀ → α → α)
-(go₁ : Fin b₁ → α → α) :=
-∃ f : Fin b₀ → α → Fin b₁, is_embedding go₀ go₁ f
-
-theorem embeds_of_strongly_embeds  {α:Type} {b₀ b₁ : ℕ} {go₀ : Fin b₀ → α → α}
-{go₁ : Fin b₁ → α → α} (h_embed: embeds_in_strongly go₀ go₁):
-embeds_in go₀ go₁ := by
-  rcases h_embed with ⟨f,hf⟩; intro i x; exists f i x; exact hf i x
-
--- For tri we can only assert a pointwise version of embed_models:
-/- It follows from tri_quad_embedding that any sequence of moves under tri generates a sequence in ℤ×ℤ
-  that can also be generated using quad:
--/
-
-def tri_quad_embedding : Fin 3 → ℤ×ℤ → Fin 4
-| 0 => λ _ ↦ 0
-| 1 => λ _ ↦ 1
-| 2 => λ x ↦ ite (Even (x.1 + x.2)) 2 3
-/-
-This is almost an embedding of presented group actions
-sending generators to generators, but not quite.
-In fact, the map φ that transports a point vertically
-across the triple point in the brick wall lattice
-is not a translation! But there are two translations (up and down) such that
-φ always agree with one or the other.
-
-The map φ has order two and all its orbits have cardinality two.
--/
-
--- Using hex we have that each entry in quad is in hex:
-def quad_hex_embedding : Fin 4 → ℤ×ℤ → Fin 6
-| 0 => λ _ ↦ 0
-| 1 => λ _ ↦ 1
-| 2 => λ _ ↦ 2
-| 3 => λ _ ↦ 3
-
-theorem quad_hex_embedding_is_embedding :
-  ∀ i : Fin 4, ∀ x : ℤ×ℤ, quad i x = hex (quad_hex_embedding i x) x
-  | 0 => λ _ ↦ rfl
-  | 1 => λ _ ↦ rfl
-  | 2 => λ _ ↦ rfl
-  | 3 => λ _ ↦ rfl
-
-
-theorem tri_quad_embedding_is_embedding :
-  ∀ i : Fin 3, ∀ x : ℤ×ℤ, tri i x = quad (tri_quad_embedding i x) x
-  | 0 => λ x ↦ rfl
-  | 1 => λ x ↦ rfl
-  | 2 => λ x ↦ by
-    by_cases h: Even (x.1+x.2)
-    have go_WS_eval:  (match (motive := Fin 3 → ℤ × ℤ → ℤ × ℤ) 2 with
-      | 0 => go_D
-      | 1 => go_A
-      | 2 => fun x => if Even (x.1 + x.2) then sp x else sm x)
-      x =  if Even (x.1 + x.2) then sp x else sm x := rfl
-
-    unfold tri go_WS; rw [go_WS_eval,if_pos h];
-    have : tri_quad_embedding 2 x = 2 := by
-      unfold tri_quad_embedding
-      have : (match (motive := Fin 3 → ℤ × ℤ → Fin 4) 2 with
-        | 0 => fun _ => 0
-        | 1 => fun _ => 1
-        | 2 => fun x => if Even (x.1 + x.2) then 2 else 3)
-        = (fun x => if Even (x.1 + x.2) then 2 else 3) := rfl
-      . rw [this]; simp; tauto
-    . rw [this]; rfl
-
-    have : tri_quad_embedding 2 x = 3 := by
-      unfold tri_quad_embedding
-      have : (match (motive := Fin 3 → ℤ × ℤ → Fin 4) 2 with
-        | 0 => fun _ => 0
-        | 1 => fun _ => 1
-        | 2 => fun x => if Even (x.1 + x.2) then 2 else 3) = fun x => if Even (x.1 + x.2) then 2 else 3
-          := rfl
-      rw [this]; simp; tauto
-    rw [this]; unfold quad
-    have : (match (motive := Fin 4 → ℤ × ℤ → ℤ × ℤ) 3 with
-      | 0 => go_D
-      | 1 => go_A
-      | 2 => sp
-      | 3 => sm) x = sm x := by rfl
-    rw [this]
-    unfold tri go_WS
-    have : (match (motive := Fin 3 → ℤ × ℤ → ℤ × ℤ) 2 with
-    | 0 => go_D
-    | 1 => go_A
-    | 2 => fun x => if Even (x.1 + x.2) then sp x else sm x)
-    = (fun x => if Even (x.1 + x.2) then sp x else sm x) := rfl
-    rw [this]; simp; tauto
-
-
--- A fundamental relation for tri:
-example: go_D ∘ go_WS ∘ go_A ∘ go_A ∘ go_WS ∘ go_D = id := by
+theorem fundamental_relation_for_tri: go_D ∘ go_WS ∘ go_A ∘ go_A ∘ go_WS ∘ go_D = id := by
   apply funext; intro x; unfold go_D go_WS go_A sp sm; simp
   by_cases h : (Even (x.1 + 1 + x.2))
   rw [if_pos h]
@@ -314,436 +1316,4 @@ example: go_D ∘ go_WS ∘ go_A ∘ go_A ∘ go_WS ∘ go_D = id := by
   have : (((1:ℤ), (0:ℤ)) + ((0, -1) + ((-1, 0) + ((-1, 0) + ((0, 1) + (1, 0)))))) = (0,0) := by decide
   . rw [this]; simp
 
-/- End of unused, other lattice structures. -/
-
-def nearby_with  {α β : Type} [DecidableEq α] [Fintype β] (go : β → α → α)
-(p q : α) : Bool := ∃ a : β, q = go a p
-
-def point_achieved_with  {α:Type} {β : Type} [Fintype β] (go : β → α → α) [DecidableEq α]
- {l : ℕ} (fold : Vector α l) (a b : Fin l) (phobic : Vector Bool l) : Bool
-:= by {
-  exact phobic.get a && phobic.get b && a.1.succ < b.1 && nearby_with go (fold.get a) (fold.get b)
-}
-
-def pts_at_with {α:Type}
-{β : Type} [Fintype β]
-(go : β → α → α)
-[DecidableEq α]
-{l:ℕ}
-(k : Fin l) (ph : Vector Bool l)
-  (fold : Vector α l) :=
-  List.sum (
-    List.map nat_of_bool (
-      List.ofFn (λ i : Fin k ↦ point_achieved_with (go : β → α → α) fold ⟨i.1,finfin i⟩ k ph)
-    )
-  )
-
-def pts_tot {α:Type}  {β : Type} [Fintype β] (go : β → α → α) [DecidableEq α]
-{l:ℕ} (ph : Vector Bool l)
-  (fold : Vector α l) := List.sum (List.ofFn (λ i : Fin l ↦ pts_at_with go i ph (fold)))
-
-/- The use of OfNat here is a clever(?) way of indicating that all folds should start at the origin,
-and we only try to do protein folding in lattices that have a natural notion of base point or zero.
--/
-
-def ne_nil_of_succ_length {α :Type} {k:ℕ}
-(tail_ih: Vector α k.succ)
-: tail_ih.1 ≠ [] := by
-    have : tail_ih.1.length = k.succ := tail_ih.2
-    intro hc; rw [hc] at this; contrapose this; simp
-
-def path_recursion {α β: Type} {tail_length: ℕ}
-(go: β → α → α) (head: β) (tail_ih: Vector α (Nat.succ (tail_length)))
-: Vector α (Nat.succ (tail_length.succ))
-:= ⟨(go head tail_ih.head) :: tail_ih.1, by simp⟩
-
--- Here we avoid List.rec and use structural induction.
--- Adding [DecidableEq α] removes the noncomputable property.
-def path {α:Type} [OfNat α 0] {β : Type} (go : β → α → α) :
-(l : List β) → Vector α l.length.succ
-| [] => ⟨[0], rfl⟩
-| head :: tail => path_recursion go head (path go tail)
-
-
--- now need a function transform_of_embeding a sequence
-def morph  {α:Type} [OfNat α 0] {b₀ b₁ : ℕ} (f : Fin b₀ → α → Fin b₁)
-(go₀ : Fin b₀ → α → α)
- (l : List (Fin b₀)) : List (Fin b₁) := by
-  induction l
-  . exact []
-  let Q := path go₀ tail
-  . exact (f head Q.head) :: tail_ih
-
--- need to prove that the morph has certain properties if f is an embedding
--- namely that path is the same
--- first prove morph is length-preserving:
-theorem morph_len {α:Type} [OfNat α 0] {b₀ b₁ : ℕ} (f : Fin b₀ → α → Fin b₁)
-(go₀ : Fin b₀ → α → α) (l : List (Fin b₀)) :
-(morph f go₀ l).length = l.length := by
-  induction l; unfold morph; rfl; unfold morph; repeat (rw [List.length_cons])
-  simp; rw [← tail_ih]; congr
-
-theorem nearby_of_embeds  {α:Type}  [DecidableEq α] {b₀ b₁ : ℕ}
-{go₀ : Fin b₀ → α → α} {go₁ : Fin b₁ → α → α} (h_embed : embeds_in go₀ go₁)
- {x y : α} (hn : nearby_with go₀ x y):
-nearby_with go₁ x y := by
-  unfold nearby_with at hn; simp at hn; rcases hn with ⟨a,ha⟩; let Q := h_embed a x
-  unfold nearby_with; simp; rw [ha]; tauto
-
-
-theorem point_achieved_with_of_embeds
-  {α:Type}  [DecidableEq α] {b₀ b₁ : ℕ}
-{go₀ : Fin b₀ → α → α} {go₁ : Fin b₁ → α → α} (h_embed : embeds_in go₀ go₁)
- {l:ℕ}
-  (fold : Vector α l) (a b : Fin l) (phobic : Vector Bool l)
-  (htri: point_achieved_with go₀ fold a b phobic) :
-         point_achieved_with go₁ fold a b phobic := by
-  unfold point_achieved_with
-  unfold point_achieved_with at htri
-  simp; simp at htri; constructor; tauto; exact nearby_of_embeds h_embed htri.2
-
-
-theorem nat_of_bool_bound_of_embeds {α:Type}  [DecidableEq α] {b₀ b₁ : ℕ}
-{go₀ : Fin b₀ → α → α} {go₁ : Fin b₁ → α → α} (h_embed : embeds_in go₀ go₁) {l:ℕ}
-  (fold : Vector α l) (a b : Fin l) (phobic : Vector Bool l):
-   nat_of_bool (point_achieved_with go₀ fold a b phobic) ≤
-   nat_of_bool (point_achieved_with go₁ fold a b phobic) :=
-   nat_of_bool_monotone (point_achieved_with_of_embeds h_embed fold a b phobic)
-
-theorem pts_at_of_embeds {α:Type}  [DecidableEq α] {b₀ b₁ : ℕ}
-{go₀ : Fin b₀ → α → α} {go₁ : Fin b₁ → α → α} (h_embed : embeds_in go₀ go₁)
-{l:ℕ} (k:Fin l) (ph : Vector Bool l) (fold : Vector α l):
-pts_at_with go₀ k ph fold ≤
-pts_at_with go₁ k ph fold := by
-  unfold pts_at_with; apply List.Forall₂.sum_le_sum
-  refine List.forall₂_iff_zip.mpr ?h.a; constructor; simp; intro a b hab; simp at hab
-  let Q := List.get_of_mem hab
-  rcases Q with ⟨i,hi⟩; simp at hi; cases hi; rw [← left,← right];
-  exact nat_of_bool_bound_of_embeds (h_embed) _ _ _ _
-
-
-
-
-theorem pts_bound_of_embeds {α:Type}  [DecidableEq α] {b₀ b₁ : ℕ}
-{go₀ : Fin b₀ → α → α} {go₁ : Fin b₁ → α → α} (h_embed : embeds_in go₀ go₁)
-{l:ℕ} (ph : Vector Bool l) (fold : Vector α l):
-pts_tot go₀ ph fold ≤
-pts_tot go₁ ph fold := by
-  unfold pts_tot; apply List.Forall₂.sum_le_sum
-  refine List.forall₂_iff_zip.mpr ?h.a; constructor; simp; intro a b hab
-  let Q := List.get_of_mem hab; rcases Q with ⟨i,hi⟩; simp at hi
-  cases hi; rw [← left,← right]; exact pts_at_of_embeds h_embed _ _ _
-
-
-
--- We now seek an upper bound for the objective function in protein folding.
--- We seek any bound, no matter how unsharp for now.
-theorem List_sum_map_bound {α:Type} {l:ℕ} (f : (Fin l) → α) {F₀ : α → ℕ} {c:ℕ}
-  (h : ∀ a,          F₀ a              ≤                                           c) :
-  List.sum (List.map F₀ (List.ofFn f)) ≤ List.length (List.map F₀ (List.ofFn f)) * c
-  := List.sum_le_card_nsmul _ _ (by {
-      intro x hx
-      simp at hx
-      rw [List.mem_ofFn] at hx
-      simp at hx
-      rcases hx with ⟨y,hy⟩
-      rw [← hy]
-      exact h (f y)
-    })
-
-
-lemma pts_at_bound  {α:Type}  [DecidableEq α]
-{β : Type} [Fintype β]
-(go : β → α → α)
-{l:ℕ} (ph : Vector Bool l) (fold : Vector α l) (i:Fin l):
-pts_at_with go i ph fold ≤ i := by
-  unfold pts_at_with
-  let Q := List_sum_map_bound (
-    fun i_1 : Fin i => point_achieved_with go fold ⟨i_1.1,finfin i_1⟩ i ph
-  ) nat_of_bool_bound
-  simp at Q
-  simp
-  exact Q
-
-
-theorem pts_achieved_bound   {α:Type}  [DecidableEq α]
-{β : Type} [Fintype β]
-(go : β → α → α)
-{l:ℕ} (ph : Vector Bool l) (fold : Vector α l):
-pts_tot go ph fold ≤ l * l := by
-  unfold pts_tot
-  have hl: List.length (List.ofFn fun i => pts_at_with go i ph fold) = l
-  := by
-    let Q := List.length_ofFn (fun i => pts_at_with go i ph fold)
-    exact Q
-  have : (∀ x ∈ List.ofFn fun i => pts_at_with go i ph fold, x ≤ l)
-  := by
-    intro x hx
-    rw [List.mem_ofFn] at hx
-    simp at hx
-    rcases hx with ⟨y,hy⟩
-    rw [← hy]
-    calc
-    _ ≤ y.1 := pts_at_bound go ph fold y
-    _ ≤ _   := Fin.is_le'
-  let Q := List.sum_le_card_nsmul (
-    (List.ofFn fun i => pts_at_with go i ph fold)
-  ) l this
-  rw [hl] at Q
-  exact Q
-
-
-theorem path_len {α: Type} [OfNat α 0] [DecidableEq α] {β: Type}
-(go: β → α → α) {l: ℕ} (moves: Vector β l)
-: (path go moves.1).1.length = l.succ
-:= by rw [(path go moves.1).2]; simp
-
-theorem two_heads {α : Type} {k :ℕ} (v: Vector α k.succ) (w : List α) (hw : w ≠ [])
-(h : v.1 = w) : Vector.head v = List.head w hw := by
-  symm at h; cases w; tauto; simp
-  have : v = head ::ᵥ ⟨tail,by let v2 := v.2; rw [← h] at v2; simp at v2; tauto⟩ := by
-    apply Vector.eq; simp; rw [h]; rfl
-  rw [this]; simp
-
-theorem path_cons {α:Type} [OfNat α 0] [DecidableEq α] {b₀ : ℕ}
-(go₀ : Fin b₀ → α → α)
-(head : Fin b₀) (tail : List (Fin b₀))
-   : (path go₀ (head ::        tail)).1 =
-             ((go₀  head (path go₀ tail).head) :: (path go₀ tail).1) := rfl
-
-theorem path_len' {α: Type} [OfNat α 0] [DecidableEq α] {β: Type}
-(go: β → α → α) (l: ℕ) (moves: List β) (hm: moves.length = l)
-: List.length (path go moves).1 = Nat.succ l
-:= by rw [(path go moves).2,hm]
-
-lemma path_nil {α:Type} [OfNat α 0] [DecidableEq α] {β:Type} [Fintype β]
-(go : β → α → α):
-(path go []).1 = [0] := rfl
-
-lemma path_eq_path_morph {α:Type} [OfNat α 0] [DecidableEq α] {b₀ b₁ : ℕ} (f : Fin b₀ → α → Fin b₁)
-(go₀ : Fin b₀ → α → α) (go₁ : Fin b₁ → α → α)
-(g : is_embedding go₀ go₁ f)
-(moves : List (Fin b₀)):
-  (path go₀ moves).1 = (path go₁ (morph f go₀ moves)).1 := by
-    induction moves
-    . unfold morph; simp; repeat (rw [path_nil])
-    rw [path_cons,g head (Vector.head (path go₀ tail)),tail_ih ]
-    unfold morph; simp; rw [path_cons]; simp
-    have : (Vector.head (path go₀ tail))
-         = (Vector.head (path go₁ (List.rec [] (fun head tail tail_ih => f head (Vector.head (path go₀ tail)) :: tail_ih) tail)))
-    := by
-      rw [two_heads (path go₀ tail) (path go₀ tail).1 (ne_nil_of_succ_length _) rfl]
-      simp_rw [tail_ih]
-      rw [two_heads]
-      unfold morph
-      simp
-    exact congrArg _ this
-
-
-def path_transformed {α: Type} [OfNat α 0] [DecidableEq α] {b₀ b₁: ℕ}
-(f: Fin b₀ → α → Fin b₁) (go₀: Fin b₀ → α → α) (go₁: Fin b₁ → α → α)
-(l: List (Fin b₀)) : Vector α l.length.succ :=
-  ⟨
-    (path go₁ (morph f go₀ l)).1,
-    by rw [path_len go₁ ⟨morph f go₀ l, morph_len f go₀ l⟩]
-  ⟩
-
-
-/- Finished February 10, 2024:
-When transforming, the underlying path in say ℤ×ℤ is unchanged.
--/
-theorem transform_of_embed  {α:Type} [OfNat α 0] [DecidableEq α] {b₀ b₁ : ℕ} (f : Fin b₀ → α → Fin b₁)
-(go₀ : Fin b₀ → α → α) (go₁ : Fin b₁ → α → α)
- (l : List (Fin b₀)) (h_embed: is_embedding go₀ go₁ f):
- path_transformed f go₀ go₁ l = path go₀ l
-:= by
-  apply SetCoe.ext; unfold path_transformed; simp; unfold is_embedding at h_embed; induction l; simp; unfold morph; simp
-  . rfl
-  have morph_cons : (morph f go₀ (head :: tail)) = (f head ((path go₀ tail).head)) :: (morph f go₀ (tail)) := rfl
-  rw [morph_cons];
-  repeat (rw [path_cons])
-  simp
-  constructor
-  let a := (Vector.head (path go₀ tail))
-  rw [h_embed head a]
-  simp
-  have : path go₁ (morph f go₀ tail)
-     = ⟨(path go₀ tail).1,(by rw [morph_len]; exact (path go₀ tail).2)⟩
-    := Vector.eq _ _ (by unfold Vector.toList; rw [← tail_ih])
-  rw [this]
-  have hau: ∃ a u, path go₀ tail = a ::ᵥ u := Vector.exists_eq_cons (path go₀ tail)
-  have : Vector.head ⟨
-        (path go₀ tail).1, ((by rw [morph_len]; exact (path go₀ tail).2)
-        : (path go₀ tail).1.length = (morph f go₀ tail).length.succ
-        )⟩ = Vector.head (path go₀ tail)
-  := by
-    rcases hau with ⟨a,ha⟩; rcases ha with ⟨u,hu⟩
-    . rw [hu]; simp; rfl
-  . exact congr_arg _ this
-  . rw [tail_ih]
-
-
-def pts_tot_bound   {α:Type} [OfNat α 0] [DecidableEq α]
-{β : Type} [Fintype β]
-(go : β → α → α) {l:ℕ} (ph : Vector Bool l.succ) (q : ℕ) :=
-∀ moves : Vector β l, List.Nodup (path go moves.1).1 →
-pts_tot go ph (⟨(path go moves.1).1,path_len _ _⟩) ≤ q
-
-
-instance    {α:Type} [OfNat α 0] [DecidableEq α]
-{β : Type} [Fintype β]
-(go : β → α → α) {l:ℕ} (ph : Vector Bool l.succ) (q : ℕ):
-DecidablePred (pts_tot_bound go moves)
-:= by
-  unfold pts_tot_bound
-  unfold pts_tot
-  exact inferInstance
-
-instance   {α:Type} [OfNat α 0] [DecidableEq α]
-{β : Type} [Fintype β]
-(go : β → α → α) : DecidablePred fun n => pts_tot_bound go ph n :=
-  by
-  unfold pts_tot_bound
-  unfold pts_tot
-  exact inferInstance
-
-#eval pts_tot tri ⟨[false],rfl⟩ ⟨[(0,0)],rfl⟩ ≤ 5
-
-
-theorem pts_tot_bound_exists {α:Type} [OfNat α 0] [DecidableEq α]
-{β : Type} [Fintype β] (go : β → α → α) {l:ℕ} (ph : Vector Bool l.succ) :
-∃ q, pts_tot_bound go ph q := by
-  exists l.succ*l.succ;
-  unfold pts_tot_bound
-  intro moves
-  let Q := pts_achieved_bound go ph (⟨(path go moves.1).1,path_len _ _⟩)
-  tauto
-
-
-/- ph has to be of succ type because there will at least be an amino acid at the origin. -/
-
-/- HP is the HP protein folding model "objective function" or "value function": -/
-def HP  {α:Type} [OfNat α 0] [DecidableEq α] {β : Type} [Fintype β]
-(go : β → α → α) {l:ℕ} (ph : Vector Bool l.succ) :ℕ := Nat.find (pts_tot_bound_exists go ph)
-
-def P_tri'  {l:ℕ} := λ ph : Vector Bool l.succ ↦ HP tri ph
-def P_quad' {l:ℕ} := λ ph : Vector Bool l.succ ↦ HP quad ph
-def P_hex' {l:ℕ} := λ ph : Vector Bool l.succ ↦ HP hex ph
-
--- #eval P_tri' ⟨[false],rfl⟩
--- #synth Decidable (pts_tot_bound tri { val := [false], property := (_ : List.length [false] = List.length [false]) } 5)
--- #eval pts_tot_bound tri ⟨[false],rfl⟩ 5
-
-
-
-/- Restructure this as value_bound_of_strong_embedding -/
-theorem value_bound_of_embeds_strongly {α:Type} [OfNat α 0] [DecidableEq α] {b₀ b₁ : ℕ}
-{go₀ : Fin b₀ → α → α} {go₁ : Fin b₁ → α → α} (h_embed : embeds_in_strongly go₀ go₁)
-{l:ℕ} (ph : Vector Bool l.succ) : HP go₀ ph ≤ HP go₁ ph := by
-  apply Nat.find_mono
-  intro q hq moves h_inj
-  let he := embeds_of_strongly_embeds h_embed
-  let Q := pts_bound_of_embeds he ph (⟨(path go₀ moves.1).1,path_len _ _⟩)
-  rcases h_embed with ⟨f,hf⟩
-  let moves' := (
-    ⟨
-      morph f go₀ moves.1,
-      (by rw [morph_len]; exact moves.2)
-    ⟩ : Vector (Fin b₁) l)
-  have h_inj':  List.Nodup (path go₁ moves'.1).1 := by
-    let Q := transform_of_embed f go₀ go₁ (moves.1) hf
-    unfold path_transformed at Q
-    let R := congrArg (λ x ↦ x.1) Q
-    simp at R
-    rw [R]
-    tauto
-  have : (path go₀ moves.1).1 = (path go₁ (morph f go₀ moves.1)).1 :=
-    path_eq_path_morph f go₀ go₁ hf moves.1
-  calc
-  _ ≤ pts_tot go₁ ph ⟨(path go₀  moves.1).1, path_len _ _⟩ := Q
-  _ = pts_tot go₁ ph ⟨(path go₁ moves'.1).1, path_len _ _⟩ := by simp_rw [this]
-  _ ≤ q                                                    := hq moves' h_inj'
-
-
-#eval HP quad ⟨[true,false,false,true],rfl⟩
-
-theorem embeds_strongly_tri_quad : embeds_in_strongly tri quad := by
-  exists tri_quad_embedding
-  exact tri_quad_embedding_is_embedding
-
-theorem embeds_strongly_quad_hex : embeds_in_strongly quad hex := by
-  exists quad_hex_embedding
-  exact quad_hex_embedding_is_embedding
-
-/- Here are some quotable results:
-  The degree 3 "hexagonal lattice" protein folding model has an objective function
-  P_tri that is bounded by that of the usual HP 2D model.
-  Similarly for P_quad and P_hex.
--/
-theorem HP_quad_bounds_tri {l:ℕ} (ph : Vector Bool l.succ) : HP tri ph ≤ HP quad ph :=
-  value_bound_of_embeds_strongly embeds_strongly_tri_quad _
-theorem HP_hex_bounds_quad {l:ℕ} (ph : Vector Bool l.succ) : HP quad ph ≤ HP hex ph :=
-  value_bound_of_embeds_strongly embeds_strongly_quad_hex _
-
-
-def first_nonzero_entry (w : List (Fin 4)) : Option (Fin 4) := by {
-  induction w
-  .  exact none
-  .  exact ite (tail_ih ≠ none) tail_ih (ite (head = 0) none head)
-}
-
--- By symmetry we may assume that all walks (folds) are orderly, although that in itself could deserve a proof.
-def orderly (w: List (Fin 4)) := w.reverse.getLast? = some (0:Fin 4)
-      ∧ first_nonzero_entry w = some 2
-
-instance (w : List (Fin 4)) : Decidable (orderly w) := by unfold orderly; exact And.decidable
-
-def stecher (x : List Bool) (w: List (Fin 4)): ℕ := dite (w.length.succ = x.length)
-    (λ h ↦ pts_tot
-      quad
-      (⟨x, rfl⟩ : Vector Bool x.length)
-      ⟨(path quad w).1,(by rw [← h,path_len'];rfl)⟩
-    )
-    (λ _ ↦ 0)
-
-def x : List Bool := [true,false,true,false,true,false, true,true]
-#eval stecher x [0, 3, 1, 1, 2, 2, 0]
--- #eval stecher x [r2.D, r2.S, r2.A, r2.A, r2.W, r2.W, r2.D]
--- #eval stecher (x ++ [false]) [0, 3, 1, 1, 2, 2, 0].reverse
-
-
-def stecher1 : Prop :=
-  those_with_suffix'
-    (λ w ↦ Function.Injective (λ i ↦ (path quad w).get i))
-    (λ w ↦ stecher x w > 2 ∧ orderly w)
-    (Gap_nil' 4 7)
-  = {⟨[0, 3, 3, 1, 1, 2, 0],rfl⟩} --{⟨[0, 3, 1, 1, 2, 2, 0],rfl⟩}
-instance : Decidable stecher1 := by {
-  unfold stecher1
-  apply decEq
-}
-
--- #eval (myvec 4 7).length
--- #eval stecher1
-
-
-def stecher2 : Prop :=
-those_with_suffix'
-    (λ w ↦ Function.Injective (λ i ↦ (path quad w).get i))
-    (
-      λ w ↦ stecher (x ++ [false]) w > 2
-        ∧ orderly w
-    )
-    (Gap_nil' 4 8) = ∅
-
-
-def stecher_conjecture_counterexample : Prop := stecher1  ∧ stecher2
-
-
-instance : Decidable stecher2 := by unfold stecher2; apply decEq
-instance : Decidable stecher_conjecture_counterexample := by
-  unfold stecher_conjecture_counterexample; unfold stecher1; unfold stecher2; exact And.decidable
-
-#eval stecher1
--- #eval stecher2
--- #eval stecher_conjecture_counterexample
+end Some_unnecessary_group_computations
