@@ -7,7 +7,7 @@ theory isabelle_for_philosophers
   imports Main HOL.Real
 begin
 (*
-Here I reproduce all examples and solve Exercises 1-9 from 
+Here I reproduce all examples and solve Exercises 1-12 from 
 Isabelle for Philosophers by Ben Blumson at https://philarchive.org/archive/BLUIFP
 *)
 
@@ -407,7 +407,7 @@ proof
     assume h0 : "A"
     from h0 have h1 : "A ∨ B" ..
     from h0 have h2 : "A ∨ C" ..
-    with h1 have h3 :  "(A ∨ B) ∧ (A ∨ C )" by (rule conjI)
+    from h1 and h2 have h3 :  "(A ∨ B) ∧ (A ∨ C )" by (rule conjI)
     thus  "(A ∨ B) ∧ (A ∨ C )".
   next
     assume h0 : "B ∧ C"
@@ -421,4 +421,66 @@ proof
     thus  "(A ∨ B) ∧ (A ∨ C )".
   qed
 qed
+
+lemma negative_paradox : "¬ A ⟶ A ⟶ B"
+proof
+assume "¬ A"
+show "A ⟶ B"
+  proof
+    assume A
+    with ‹¬ A› show B by (rule notE)
+  qed
+qed
+
+(* Exercise 10 *)
+lemma explosion: "A ∧ ¬ A ⟶ B"
+proof
+  assume h : "A ∧ ¬ A"
+  from h have h1 : "¬ A" ..
+  from h have h0 : A ..
+  with h1 show B by (rule notE)
+qed
+
+(* Exercise 10 *)
+lemma "A ∨ B ⟶ ¬ A ⟶ B"
+proof
+  assume h : "A ∨ B"
+  show  "¬ A ⟶ B"
+  proof
+    assume h2 : "¬ A"
+    show B
+    proof (rule disjE)
+      show "A ∨ (B)" using h.
+    next
+      assume h0 : A
+      with h2 show B by (rule notE)
+    next
+      assume h1 : B
+      thus B.
+    qed
+  qed
+qed
+
+lemma non_contradiction : "¬ (A ∧ ¬ A)"
+proof (rule notI)
+  assume h : "A ∧ ¬A"
+  hence "¬ A" ..
+  moreover from h have A..
+  ultimately show False by (rule notE) (*could avoid all this English using from.. have*)
+qed
+
+(* Exercise 12 *)
+lemma "A ⟶ ¬ ¬ A"
+proof
+  assume h : A
+  show "¬ ¬ A"
+  proof (rule notI)
+    assume h0 : "¬ A"
+    from h0 and h have "False" by (rule notE)
+    thus False.
+  qed
+qed
+
+    
+
 
