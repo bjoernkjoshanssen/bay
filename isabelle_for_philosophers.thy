@@ -7,7 +7,7 @@ theory isabelle_for_philosophers
   imports Main HOL.Real
 begin
 (*
-Here I reproduce all examples and solve Exercises 1-14 from 
+Here I reproduce all examples and solve Exercises 1 -- 18(i) from 
 Isabelle for Philosophers by Ben Blumson at https://philarchive.org/archive/BLUIFP
 *)
 
@@ -542,5 +542,81 @@ proof cases
   next
   assume "¬ A"
   thus "A ∨ ¬ A"..
+qed
+
+lemma exercise_15 : "(A ⟶ B) ∨ (A ⟶ ¬ B)"
+proof cases
+  assume h : B
+  then have h0 : "A ⟶ B" ..
+  then have h1 : "(A ⟶ B) ∨ (A ⟶ ¬ B)" ..
+  thus "(A ⟶ B) ∨ (A ⟶ ¬ B)".
+next
+  assume h : "¬ B"
+  then have h0 : "(A ⟶ ¬ B)" ..
+  then have h1 : "(A ⟶ B) ∨ (A ⟶ ¬ B)" ..
+  thus "(A ⟶ B) ∨ (A ⟶ ¬ B)".
+qed
+
+lemma exercise_16 : "(A ⟶ B) ∨ (B ⟶ A)" 
+proof cases
+  assume h : B
+  then have h0 : "A ⟶ B" ..
+  then have h1 : "(A ⟶ B) ∨ (B ⟶ A)" ..
+  thus "(A ⟶ B) ∨ (B ⟶ A)".
+next
+  assume h : "¬ B"
+  then have "(B ⟶ A)" by (simp)
+  then have  "(A ⟶ B) ∨ (B ⟶ A)" ..
+  thus  "(A ⟶ B) ∨ (B ⟶ A)" .
+qed
+
+lemma exercise_17 : "(A ∨ B) ∧ (A ∨ C ) --> A ∨ B ∧ C"
+proof
+  assume h : "(A ∨ B) ∧ (A ∨ C )"
+  show " A ∨ (B ∧ C)"
+  proof cases
+    assume h0 : A
+    then have  " A ∨ (B ∧ C)" ..
+    thus  " A ∨ (B ∧ C)".
+  next
+    assume h0 : "¬ A"
+    from h have h1 : "A ∨ B" ..
+    with h0 have h2 : B by (simp)
+    from h have h3 : "A ∨ C" ..
+    with h0 have h4 : C by (simp)
+    from h2 and h4 have h5 : "B ∧ C" ..
+    thus "A ∨ (B ∧ C)" ..
+  qed
+qed
+
+lemma exercise_18_i : "(A ⟶ B) ⟷ (¬ A ∨ B)"
+proof
+  assume h : "(A ⟶ B)"
+  show " (¬ A ∨ B)"
+  proof cases
+    assume h0 : A
+    with h have B ..
+    thus "¬ A ∨ B" ..
+  next
+    assume h0 : "¬ A"
+    thus "¬ A ∨ B" ..
+  qed    
+next
+  assume h :  " (¬ A ∨ B)"
+  show "(A ⟶ B)"
+  proof
+    assume h0 : "A"
+    show "B"
+    proof (rule disjE)
+      show " (¬ A ∨ B)" using h.
+      next
+      assume h1 : "¬ A"
+      from h1 and h0 have B by (rule notE)
+      thus B.
+    next
+      assume "B"
+      thus "B".
+    qed
+  qed
 qed
 
