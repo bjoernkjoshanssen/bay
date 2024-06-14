@@ -7,7 +7,7 @@ theory isabelle_for_philosophers
   imports Main HOL.Real
 begin
 (*
-Here I reproduce all examples and solve Exercises 1-12 from 
+Here I reproduce all examples and solve Exercises 1-14 from 
 Isabelle for Philosophers by Ben Blumson at https://philarchive.org/archive/BLUIFP
 *)
 
@@ -481,6 +481,66 @@ proof
   qed
 qed
 
-    
+(* Exercise 13 *)
 
+lemma aux : "¬ (A ∨ ¬ A) ⟶ ¬ A"
+proof
+  assume h0 : "¬ (A ∨ ¬ A)"
+  show "¬ A"
+  proof
+    assume h1 : A
+    then have h2 : "A ∨ ¬ A" ..
+    from h0 and h2 have False by (rule notE)
+    thus False.
+  qed
+qed
+
+lemma "¬ ¬ (A ∨ ¬ A)"
+proof (rule notI)
+  assume h0 : "¬ (A ∨ ¬ A)"
+  then have h1 : "¬ A" by (simp) (* should perhaps use lemma aux *)
+  then have h2 : "A ∨ ¬ A" ..
+  from h0 and h2 have False by (rule notE)
+  thus False.
+qed
+
+lemma "(¬ A ⟶ False) ⟶ A"
+proof
+  assume h0 : "¬ A ⟶ False"
+  show A
+  proof (rule ccontr )
+    assume h : "¬ A"
+    with h0 show False..
+  qed
+qed
+
+lemma double_negation_elimination: "¬¬A ⟶ A"
+proof
+  assume h : "¬¬A"
+  show A
+  proof (rule ccontr )
+    assume "¬ A"
+    with h show False..
+  qed
+qed
+
+(* Exercise 14 *)
+
+lemma excluded_middle: "A ∨ ¬ A"
+proof (rule ccontr)
+  assume h0 : "¬(A ∨ ¬ A)"
+  then have h1 : "¬ A" by (simp) (* should perhaps use lemma aux *)
+  then have h2 : "A ∨ ¬ A" ..
+  from h0 and h2 have False by (rule notE)
+  thus False.
+qed
+
+lemma "A ∨ ¬ A"
+proof cases
+  assume A
+  thus "A ∨ ¬ A"..
+  next
+  assume "¬ A"
+  thus "A ∨ ¬ A"..
+qed
 
