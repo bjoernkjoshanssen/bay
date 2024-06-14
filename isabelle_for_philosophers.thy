@@ -7,7 +7,7 @@ theory isabelle_for_philosophers
   imports Main HOL.Real
 begin
 (*
-Here I reproduce all examples and solve Exercises 1-8 from 
+Here I reproduce all examples and solve Exercises 1-9 from 
 Isabelle for Philosophers by Ben Blumson at https://philarchive.org/archive/BLUIFP
 *)
 
@@ -396,3 +396,29 @@ next
     thus "A ∨ (B ∨ C)".
   qed
 qed
+
+lemma exercise_9 : "A ∨ B ∧ C ⟶ (A ∨ B) ∧ (A ∨ C )"
+proof
+  assume h : "A ∨ B ∧ C"
+  show  "(A ∨ B) ∧ (A ∨ C )"
+  proof (rule disjE)
+    show "A ∨ (B ∧ C)" using h.
+  next
+    assume h0 : "A"
+    from h0 have h1 : "A ∨ B" ..
+    from h0 have h2 : "A ∨ C" ..
+    with h1 have h3 :  "(A ∨ B) ∧ (A ∨ C )" by (rule conjI)
+    thus  "(A ∨ B) ∧ (A ∨ C )".
+  next
+    assume h0 : "B ∧ C"
+    from h0 have h1 : "B" ..
+    from h1 have h4 : "A ∨ B" ..
+
+    from h0 have h2 : "C" ..
+    from h2 have h5 : "A ∨ C" ..
+
+    with h4 have h3 : "(A ∨ B) ∧ (A ∨ C )" ..
+    thus  "(A ∨ B) ∧ (A ∨ C )".
+  qed
+qed
+
