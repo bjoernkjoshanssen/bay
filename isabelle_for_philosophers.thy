@@ -7,7 +7,7 @@ theory isabelle_for_philosophers
   imports Main HOL.Real
 begin
 (*
-Here I reproduce all examples and solve Exercises 1-6 from 
+Here I reproduce all examples and solve Exercises 1-7 from 
 Isabelle for Philosophers by Ben Blumson at https://philarchive.org/archive/BLUIFP
 *)
 
@@ -315,4 +315,25 @@ proof
     thus A.
   qed
 qed
-  
+
+lemma exercise_7 : "(A ⟶ C ) ∧ (B ⟶ C ) ⟶ A ∨ B ⟶ C"
+proof
+  assume h : "(A ⟶ C ) ∧ (B ⟶ C )"
+  from h have h0 : "A ⟶ C" by (rule conjE)
+  from h have h1 : "B ⟶ C" by (rule conjE)
+  show " A ∨ B ⟶ C"
+  proof
+    assume "A ∨ B"
+    show "C"
+    proof (rule disjE)
+        show "A ∨ B" using ‹A ∨ B›. (* just to announce which disjunction we're using*)
+        next
+          assume A
+          thus C using h0 by (simp)
+
+        next
+        assume B
+        thus C using h1 by (simp)
+    qed
+  qed
+qed
