@@ -7,7 +7,7 @@ theory isabelle_for_philosophers
   imports Main HOL.Real
 begin
 (*
-Here I reproduce all examples and solve Exercises 1-7 from 
+Here I reproduce all examples and solve Exercises 1-8 from 
 Isabelle for Philosophers by Ben Blumson at https://philarchive.org/archive/BLUIFP
 *)
 
@@ -316,6 +316,10 @@ proof
   qed
 qed
 
+
+
+
+
 lemma exercise_7 : "(A ⟶ C ) ∧ (B ⟶ C ) ⟶ A ∨ B ⟶ C"
 proof
   assume h : "(A ⟶ C ) ∧ (B ⟶ C )"
@@ -335,5 +339,60 @@ proof
         assume B
         thus C using h1 by (simp)
     qed
+  qed
+qed
+
+lemma exercise_8 : "A ∨ B ∨ C ⟷ (A ∨ B) ∨ C"
+proof
+  assume left: "A ∨ B ∨ C"
+  show "(A ∨ B) ∨ C"
+  proof (rule disjE)
+    show "A ∨ B ∨ C" using left.
+  next
+    assume h : A
+    from h have h0 : "A ∨ B" by (rule disjI1)
+    from h0 have h1 : "(A ∨ B) ∨ C" by (rule disjI1)
+    thus "(A ∨ B) ∨ C".
+  next
+    assume h2 : "B ∨ C"
+    show "(A ∨ B) ∨ C"
+    proof (rule disjE)
+      show "B ∨ C" using h2.
+    next
+      assume h3 : "B"
+      from h3 have h4 : "A ∨ B" by (rule disjI2)
+      from h4 have h5 : "(A ∨ B) ∨ C" by (rule disjI1)
+      thus "(A ∨ B) ∨ C".
+    next
+      assume h3 : "C"
+      from h3 have h4 : "(A ∨ B) ∨ C" by (rule disjI2)
+      thus "(A ∨ B) ∨ C".
+    qed
+  qed
+next
+  assume right: "(A ∨ B) ∨ C"
+  show "A ∨ B ∨ C"
+  proof (rule disjE)
+    show "(A ∨ B) ∨ C" using right.
+  next
+    assume h : "A ∨ B"
+    show "A ∨ (B ∨ C)"
+    proof (rule disjE)
+      show "A ∨ B" using h.
+    next
+      assume h0 : "A"
+      from h0 have "A ∨ (B ∨ C)" by (rule disjI1)
+      thus "A ∨ (B ∨ C)".
+    next
+      assume h0 : "B"
+      from h0 have h1 : "(B ∨ C)" by (rule disjI1)
+      from h1 have h2 : "A ∨ (B ∨ C)" by (rule disjI2)
+      thus "A ∨ (B ∨ C)".
+    qed
+  next
+    assume h : "C"
+    from h have h0 : "B ∨ C"..
+    from h0 have h1 : "A ∨ (B ∨ C)"..
+    thus "A ∨ (B ∨ C)".
   qed
 qed
