@@ -7,7 +7,7 @@ theory isabelle_for_philosophers
   imports Main HOL.Real
 begin
 (*
-Here I reproduce all examples and solve Exercises 1 -- 19 from 
+Here I reproduce all examples and solve Exercises 1 -- 23 from 
 Isabelle for Philosophers by Ben Blumson at https://philarchive.org/archive/BLUIFP
 *)
 
@@ -670,5 +670,80 @@ next
   with h4 have D ..
   thus D.
 qed
- 
 
+(* Now, quantifiers: *)
+
+lemma "(∀ x . F x ) ⟶ F a"
+proof
+assume "∀ x . F x"
+thus "F a" by (rule allE)
+qed
+
+lemma exercise_20 : "(∀ x . F x ) ⟶ F a ∧ F b"
+proof
+assume h : "∀ x . F x"
+  from h have ha : "F a" by (rule allE)
+  from h have hb : "F b" by (rule allE)
+  from ha and hb have h0 : "F a ∧ F b" ..
+  thus  "F a ∧ F b".
+qed
+
+lemma exercise_21 : "(∀ x . R x d) ⟶ (∀ z . R d z ⟶ z = m) ⟶ d = m"
+proof
+  assume h0 : "(∀ x . R x d)"
+  show "(∀ z . R d z ⟶ z = m) ⟶ d = m"
+  proof
+    assume h1 : "(∀ z . R d z ⟶ z = m)"
+    from h0 have h2 : "R d d" ..
+    from h1 have h3 : "R d d ⟶ d = m" ..
+    from h3 and h2 have "d = m" ..
+    thus "d = m".
+  qed
+qed
+
+lemma "∀ x . F x ⟶ F x" (* . in Isabelle is like . in Lean *)
+proof (rule allI)
+  fix a
+  show "F a ⟶ F a"
+  proof
+  assume "F a"
+  thus "F a".
+  qed
+qed
+
+lemma exercise_22 : "(∀ x . F x ∧ G x ) ⟶ (∀ x . F x )"
+proof
+  assume h : "(∀ x . F x ∧ G x )"
+  show " (∀ x . F x )"
+  proof
+    fix a
+    from h have h0 : "F a ∧ G a" ..
+    from h0 have "F a" ..
+    thus "F a".
+  qed
+qed
+
+(* This one is just wrong. *)
+lemma exercise_23' : "(∀ x . F x ) ⟶ (∀ x . F x ⟶ G x )" oops
+(* This is probably what was meant: *)
+
+lemma exercise_23' : "(∀ x . F x ) ⟶ (∀ x . G x ⟶ F x )"
+proof
+  assume h : "(∀ x . F x )"
+  show "(∀ x . G x ⟶ F x)"
+  proof
+    fix a
+    show "G a ⟶ F a"
+    proof
+      assume "G a"
+      from h have "F a" ..
+      thus "F a".
+    qed
+  qed
+qed
+
+lemma "F a ⟶ (∃ x . F x )"
+proof
+assume "F a"
+thus "∃ x . F x" by (rule exI)
+qed
