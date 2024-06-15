@@ -7,7 +7,7 @@ theory isabelle_for_philosophers
   imports Main HOL.Real
 begin
 (*
-Here I reproduce all examples and solve Exercises 1 -- 18(i) from 
+Here I reproduce all examples and solve Exercises 1 -- 19 from 
 Isabelle for Philosophers by Ben Blumson at https://philarchive.org/archive/BLUIFP
 *)
 
@@ -619,4 +619,56 @@ next
     qed
   qed
 qed
+
+
+lemma exercise_18_ii : "(A ⟶ B) ⟷ ¬ (A ∧ ¬ B)"
+proof
+  assume h : "(A ⟶ B)"
+  show "¬ (A ∧ ¬ B)"
+  proof
+    assume h0 : "A ∧ ¬ B"
+    from h0 have h1 : A ..
+    with h have h3 : B ..
+    from h0 have h2 : "¬ B" ..
+    from h2 and h3 have False ..
+    thus False.
+  qed
+next
+  assume h :  "¬ (A ∧ ¬ B)"
+  show "(A ⟶ B)"
+  proof
+    assume h0 : "A"
+    show "B"
+    proof (rule ccontr)
+      assume h1 : "¬ B"
+      with h0 have h2 : "A ∧ ¬ B" ..
+      with h have False ..
+      thus False.
+    qed
+  qed
+qed
+
+
+(* Exercise 19 *)
+lemma
+assumes h0 : "A ∨ ¬ A"
+assumes h1 : "A ⟶ B ⟶ A"
+assumes h2 : "(B ⟶ A) ⟶ D"
+assumes h3 : "¬ A ⟶ C ⟶ ¬ A"
+assumes h4 : "(C ⟶ ¬ A) ⟶ D"
+shows D
+proof (rule disjE)
+  show "(A ∨ ¬ A)" using h0.
+next
+  assume h1 : "A"
+  from h1 have "B ⟶ A" ..
+  with h2 have D ..
+  thus D.
+next
+  assume h5 : "¬ A"
+  from h5 have "C ⟶ ¬ A" ..
+  with h4 have D ..
+  thus D.
+qed
+ 
 
