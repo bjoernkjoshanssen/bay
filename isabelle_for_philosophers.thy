@@ -7,7 +7,7 @@ theory isabelle_for_philosophers
   imports Main HOL.Real
 begin
 (*
-Here I reproduce all examples and solve Exercises 1 -- 26 from 
+Here I reproduce all examples and solve all the exercises (1 -- 34) from 
 Isabelle for Philosophers by Ben Blumson at https://philarchive.org/archive/BLUIFP
 *)
 
@@ -734,7 +734,7 @@ proof
 qed
 
 (* This one is just wrong. *)
-lemma exercise_23 : "(∀ x . F x ) ⟶ (∀ x . F x ⟶ G x )" oops
+lemma exercise_23 : "(∀ x . F x ) ⟶ (∀ x . F x ⟶ G x )" nitpick oops
 (* This is probably what was meant: *)
 
 lemma exercise_23' : "(∀ x . F x ) ⟶ (∀ x . G x ⟶ F x )"
@@ -831,9 +831,161 @@ qed
 (* Existential elimination: *)
 lemma "(∃ x . F x ∧ G x ) ⟶ (∃ x . F x )"
 proof
-assume "∃ x . F x ∧ G x"
-then obtain a where "F a ∧ G a" by (rule exE)
-hence "F a" ..
-thus "∃ x . F x" ..
+  assume "∃ x . F x ∧ G x"
+  then obtain a where "F a ∧ G a" by (rule exE)
+  hence "F a" ..
+  thus "∃ x . F x" ..
 qed
 
+lemma exercise_27 : "(∃ x . F x ) ⟶ (∃ x . F x ∨ G x )"
+proof
+  assume h : "(∃ x . F x )"
+  from h obtain a where ha : "F a" by (rule exE)  
+  then have h0 : "F a ∨ G a" ..
+  
+  from h0 have h1 : "∃ x . F x ∨ G x" ..
+  thus "∃ x . F x ∨ G x".
+qed
+
+lemma exercise_28 : "∃ x . F x ⟶ (∀ x . F x )"
+proof (rule disjE)
+  show "(∀ x . F x) ∨ (¬ (∀ x . F x))" using excluded_middle.
+next
+  assume h : "(∀ x . F x)"
+  from h have "F a ⟶ (∀ x . F x)" ..
+  thus  "∃ x . F x ⟶ (∀ x . F x )" ..
+next
+  assume h : " (¬ (∀ x . F x))"
+  with not_all_implies_some_not have h0 : "∃ x . ¬ F x" ..
+  from h0 obtain a where h1: "¬ F a" by (rule exE)
+  from h1 have h2 : "F a ⟶ (∀ x . F x)" by (simp)
+  from h2 have h3 :  "∃ x . F x ⟶ (∀ x . F x )" ..
+  thus  "∃ x . F x ⟶ (∀ x . F x )".
+qed
+
+lemma "∀ x . x = x"
+proof
+  fix a
+  show "a = a" by (rule refl)
+qed
+
+lemma exercise_29 : "F a ⟶ a = a" 
+proof
+  assume "F a"
+  show "a = a" by (rule refl)
+qed
+
+lemma exercise_30 : "∀ x . ∃ y. x = y"
+proof
+  fix a
+  have h : "a = a" by (rule refl)
+  from h have h0 : "∃ y . a = y" ..
+  show  "∃ y . a = y" using h0.
+qed
+
+lemma "a = b ⟶ F a ⟶ F b"
+proof
+  assume h : "a = b"
+  show "F a ⟶ F b"
+  proof
+    assume "F a"
+    with h show "F b" by (rule subst)
+  qed
+qed
+
+lemma substitution : "a = b ⟶ F b ⟶ F a"
+proof
+  assume h : "a = b"
+  show "F b ⟶ F a"
+  proof
+    assume "F b"
+    with h show "F a" by (rule ssubst)
+  qed
+qed
+
+lemma exercise_31 : "a = b ⟶ b = a"
+proof
+  assume h : "a = b"
+  from h have "b = a" ..
+  thus "b = a".
+qed
+
+lemma exercise_32 : "a = b ⟶ b = c ⟶ a = c"
+proof
+  assume h : "a = b"
+  show "(b = c) ⟶ (a = c)"
+  proof
+    assume "b = c"
+    with h show "a = c" by (rule ssubst)
+  qed
+qed
+
+lemma exercise_33 : "x = y ⟶ (F x ⟷ F y)"
+proof
+  assume h : "x = y"
+  show "F x ⟷ F y"
+  proof
+    assume h0 : "F x"
+    with h show "F y" by (rule subst)
+  next
+    assume h0 : "F y"
+    with h show "F x" by (rule ssubst)
+  qed
+qed
+
+lemma "(THE x . x = a) = a"
+proof (rule the_equality)
+  show "a = a" ..
+  next
+  fix b
+  assume "b = a"
+  thus "b = a".
+qed
+
+lemma "(∀ x . F x ) ⟶ F (THE x . G x )"
+proof
+assume "∀ x . F x"
+thus "F (THE x . G x )" by (rule allE)
+qed
+
+lemma exercise_34 : "(∀ x . F x ⟷ x = a) ⟶ (THE x . F x ) = a"
+proof
+  assume h : "(∀ x . F x ⟷ x = a)"
+  show "(THE x . F x ) = a"
+  proof (rule the_equality)
+
+    from h have h0 : "F a ⟷ a = a" ..
+    from h0 have h1 : "a = a ⟶ F a" ..
+    have h2 : "a = a" by (rule refl)
+    from h1 and h2 have "F a" ..
+    thus "F a".
+  next
+    fix b
+    assume h3 : "F b"
+    from h have h4 : "F b ⟷ b = a" ..
+    from h4 have h5 : "F b ⟶ b = a" ..
+    from h5 and h3 have h6 : "b = a" by (rule mp)
+    thus "b = a".
+  qed
+qed
+
+lemma
+  assumes "p ⟶ q"
+  assumes q
+  shows p nitpick oops
+  
+lemma "(∀ x . F x ⟶ G x ) ∨ (∃ x . F x ∧ ¬ G x )" sledgehammer
+  by auto  
+
+lemma "(∀ x . F x ⟶ G x ) ∨ (∃ x . F x ∧ ¬ G x )" sledgehammer [isar_proofs]
+proof -
+{ assume "¬ F v0_0 ∨ G v0_0"
+have ?thesis
+by blast }
+  then show ?thesis
+    by blast
+qed
+
+lemma "(∀ x . ∃ y. R x y) ⟶ (∃ y. ∀ x . R x y)" try oops
+lemma "(∃ x . ∀ y. R x y) ⟶ (∀ y. ∃ x . R x y)" try
+by auto
