@@ -7,7 +7,7 @@ theory isabelle_for_philosophers
   imports Main HOL.Real
 begin
 (*
-Here I reproduce all examples and solve Exercises 1 -- 24 from 
+Here I reproduce all examples and solve Exercises 1 -- 26 from 
 Isabelle for Philosophers by Ben Blumson at https://philarchive.org/archive/BLUIFP
 *)
 
@@ -776,35 +776,50 @@ proof (-)
     thus  "∃ x .  ¬ F x ∨ F x" by (rule exI)
   qed
 
-lemma exercise_24_warmup : "((∃ y . F y) ∨ (¬ (∃ y . F y))) ⟶ (∃ x . (∃ y. F y) ⟶ F x)"
+lemma exercise_24 : " (∃ x . (∃ y. F y) ⟶ F x)"
+proof (rule disjE)
+  show "(∃ y . F y) ∨ (¬ (∃ y . F y))" using excluded_middle. (* very finicky about parentheses *)
+next
+  assume "∃ y . F y"
+  then obtain a where "F a" by (rule exE)
+  hence h : "(∃ y . F y) ⟶ F a" ..
+  thus  "∃ x . (∃ y. F y) ⟶ F x" ..
+next
+  assume "(¬ (∃ y . F y))"
+  then have h : " (∃ y. F y) ⟶ F a" by (simp)
+  from h have  "∃ x . (∃ y. F y) ⟶ F x" by (rule exI)
+  thus  "∃ x . (∃ y. F y) ⟶ F x".
+qed
+
+
+lemma ex_25_helper :  "¬ (∃ x . ¬ F x) ⟶ (∀ x . F x)"
 proof
-  assume hx : "(∃ y . F y) ∨ (¬ (∃ y . F y))"
-  show " (∃ x . (∃ y. F y) ⟶ F x)"
-  proof (rule disjE)
-    show "(∃ y . F y) ∨ (¬ (∃ y . F y))" using excluded_middle. (* very finicky about parentheses *)
-  next
-    assume "∃ y . F y"
-    then obtain a where "F a" by (rule exE)
-    hence h : "(∃ y . F y) ⟶ F a" ..
-    thus  "∃ x . (∃ y. F y) ⟶ F x" ..
-  next
-    assume "(¬ (∃ y . F y))"
-    then have h : " (∃ y. F y) ⟶ F a" by (simp)
-    from h have  "∃ x . (∃ y. F y) ⟶ F x" by (rule exI)
-    thus  "∃ x . (∃ y. F y) ⟶ F x".
+  assume h : "¬ (∃ x . ¬ F x)"
+  show "∀ x . F x"
+  proof
+    fix a
+    show "F a"
+    proof (rule ccontr)
+        assume hc : "¬ F a"
+        then have h0 : "∃ x . ¬ F x" ..
+        from h and h0 have "False" by (rule notE)
+        thus "False".
+    qed
   qed
 qed
 
-lemma exercise_24 : "∃ x . (∃ y. F y) ⟶ F x"
-proof -
-  from excluded_middle have h1 :  "(∃ y . F y) ∨ (¬ (∃ y . F y))".
-  from exercise_24_warmup have h0 : "((∃ y . F y) ∨ (¬ (∃ y . F y))) ⟶ (∃ x . (∃ y. F y) ⟶ F x)".
-  from h0 and h1 have h2 : "∃ x . (∃ y. F y) ⟶ F x" by (rule mp)
-  thus  "∃ x . (∃ y. F y) ⟶ F x".
+(* Exercise 25 *)
+lemma not_all_implies_some_not: "¬ (∀ x . F x ) ⟶ (∃ x . ¬ F x )"
+proof
+  assume h0 : "¬ (∀ x . F x )"
+  show " (∃ x . ¬ F x )"
+  proof (rule ccontr)
+    assume "¬ (∃ x . ¬ F x )"
+    with ex_25_helper have h1 : "∀ x . F x" ..
+    from h0 and h1 have False by (rule notE)
+    thus False.
+  qed
 qed
-  
-  
-(*By cases: F holds of everything, or not*)
 
 lemma exercise_26 : "(∀ x . F x ) ⟶ (∃ x . F x )"
 proof
