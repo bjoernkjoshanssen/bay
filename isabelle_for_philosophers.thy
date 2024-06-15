@@ -7,7 +7,7 @@ theory isabelle_for_philosophers
   imports Main HOL.Real
 begin
 (*
-Here I reproduce all examples and solve Exercises 1 -- 23 from 
+Here I reproduce all examples and solve Exercises 1 -- 24 from 
 Isabelle for Philosophers by Ben Blumson at https://philarchive.org/archive/BLUIFP
 *)
 
@@ -535,6 +535,16 @@ proof (rule ccontr)
   thus False.
 qed
 
+lemma excluded_middle': "¬ A ∨ A"
+proof (rule ccontr)
+  assume h0 : "¬(¬ A ∨ A)"
+  then have h1 : "¬ A" by (simp) (* should perhaps use lemma aux *)
+  then have h2 : " ¬ A ∨ A" ..
+  from h0 and h2 have False by (rule notE)
+  thus False.
+qed
+
+
 lemma "A ∨ ¬ A"
 proof cases
   assume A
@@ -724,7 +734,7 @@ proof
 qed
 
 (* This one is just wrong. *)
-lemma exercise_23' : "(∀ x . F x ) ⟶ (∀ x . F x ⟶ G x )" oops
+lemma exercise_23 : "(∀ x . F x ) ⟶ (∀ x . F x ⟶ G x )" oops
 (* This is probably what was meant: *)
 
 lemma exercise_23' : "(∀ x . F x ) ⟶ (∀ x . G x ⟶ F x )"
@@ -747,3 +757,68 @@ proof
 assume "F a"
 thus "∃ x . F x" by (rule exI)
 qed
+
+lemma "∃ x. x = x"
+  by force
+
+lemma "∃ x . F x ∨ ¬ F x"
+proof (-)
+  from excluded_middle have h : "F a ∨ ¬ F a". (* Using the lemma excluded_middle above *)
+    thus  "∃ x . F x ∨ ¬ F x" by (rule exI)
+  qed
+
+(*
+This example doesn't follow from excluded_middle as stated, because the ¬ is on the left vs. on the right.
+*)
+lemma as_stated : "∃ x . ¬ F x ∨ F x" 
+proof (-)
+  from excluded_middle' have h : "¬ F a ∨ F a". (* Using the lemma excluded_middle above *)
+    thus  "∃ x .  ¬ F x ∨ F x" by (rule exI)
+  qed
+
+lemma exercise_24_warmup : "((∃ y . F y) ∨ (¬ (∃ y . F y))) ⟶ (∃ x . (∃ y. F y) ⟶ F x)"
+proof
+  assume hx : "(∃ y . F y) ∨ (¬ (∃ y . F y))"
+  show " (∃ x . (∃ y. F y) ⟶ F x)"
+  proof (rule disjE)
+    show "(∃ y . F y) ∨ (¬ (∃ y . F y))" using excluded_middle. (* very finicky about parentheses *)
+  next
+    assume "∃ y . F y"
+    then obtain a where "F a" by (rule exE)
+    hence h : "(∃ y . F y) ⟶ F a" ..
+    thus  "∃ x . (∃ y. F y) ⟶ F x" ..
+  next
+    assume "(¬ (∃ y . F y))"
+    then have h : " (∃ y. F y) ⟶ F a" by (simp)
+    from h have  "∃ x . (∃ y. F y) ⟶ F x" by (rule exI)
+    thus  "∃ x . (∃ y. F y) ⟶ F x".
+  qed
+qed
+
+lemma exercise_24 : "∃ x . (∃ y. F y) ⟶ F x"
+proof -
+  from excluded_middle have h1 :  "(∃ y . F y) ∨ (¬ (∃ y . F y))".
+  from exercise_24_warmup have h0 : "((∃ y . F y) ∨ (¬ (∃ y . F y))) ⟶ (∃ x . (∃ y. F y) ⟶ F x)".
+  from h0 and h1 have h2 : "∃ x . (∃ y. F y) ⟶ F x" by (rule mp)
+  thus  "∃ x . (∃ y. F y) ⟶ F x".
+qed
+  
+  
+(*By cases: F holds of everything, or not*)
+
+lemma exercise_26 : "(∀ x . F x ) ⟶ (∃ x . F x )"
+proof
+  assume "∀ x . F x"
+  then have "F a" ..
+  thus "∃ x . F x" ..
+qed
+
+(* Existential elimination: *)
+lemma "(∃ x . F x ∧ G x ) ⟶ (∃ x . F x )"
+proof
+assume "∃ x . F x ∧ G x"
+then obtain a where "F a ∧ G a" by (rule exE)
+hence "F a" ..
+thus "∃ x . F x" ..
+qed
+
